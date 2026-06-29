@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Stopwatch",
+  "version": "1.0",
+  "description": "Add a running stopwatch next to the YouTube video title",
+  "permissions": ["activeTab", "scripting"],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  }
+}

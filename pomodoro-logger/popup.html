@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      width: 240px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      margin: 0;
+    }
+    h2 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      color: #fff;
+      text-align: center;
+    }
+    #timer {
+      text-align: center;
+      font-family: 'Courier New', monospace;
+      font-size: 28px;
+      font-weight: bold;
+      color: #3ea6ff;
+      margin: 8px 0 4px 0;
+      letter-spacing: 2px;
+    }
+    #currentActivity {
+      text-align: center;
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 12px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #workBtn {
+      background: #27ae60;
+    }
+    #workBtn:hover {
+      background: #219a52;
+    }
+    #breakBtn {
+      background: #e67e22;
+    }
+    #breakBtn:hover {
+      background: #d35400;
+    }
+    #customBtn {
+      width: 100%;
+      background: #8e44ad;
+      margin-bottom: 6px;
+    }
+    #customBtn:hover {
+      background: #7d3c98;
+    }
+    #customInput {
+      display: none;
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #3ea6ff;
+      border-radius: 6px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 13px;
+      margin-bottom: 6px;
+      box-sizing: border-box;
+    }
+    #customInput:focus {
+      outline: none;
+      border-color: #8e44ad;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #333;
+      margin: 10px 0;
+    }
+    #setupSection {
+      margin-top: 4px;
+    }
+    #setupSection label {
+      font-size: 11px;
+      color: #888;
+    }
+    #scriptUrl {
+      width: 100%;
+      padding: 6px;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 11px;
+      margin: 4px 0;
+      box-sizing: border-box;
+    }
+    #saveUrl {
+      width: 100%;
+      padding: 6px;
+      border: none;
+      border-radius: 4px;
+      background: #2c3e50;
+      color: #fff;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    #saveUrl:hover {
+      background: #34495e;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 12px;
+      text-align: center;
+      min-height: 18px;
+      color: #aaa;
+    }
+    .success { color: #2ecc71 !important; }
+    .error { color: #e74c3c !important; }
+    #history {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #888;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+    .history-entry {
+      padding: 2px 0;
+      border-bottom: 1px solid #222;
+    }
+    .history-entry .time { color: #3ea6ff; }
+    .history-entry .work { color: #2ecc71; }
+    .history-entry .break { color: #e67e22; }
+    .history-entry .custom { color: #8e44ad; }
+  </style>
+</head>
+<body>
+  <h2>Pomodoro Logger</h2>
+  <div id="timer">00:00:00</div>
+  <div id="currentActivity">No activity yet</div>
+  <div class="btn-row">
+    <button id="workBtn">Work</button>
+    <button id="breakBtn">Break</button>
+  </div>
+  <button id="customBtn">Custom</button>
+  <input type="text" id="customInput" placeholder="Type activity, press Enter">
+  <div id="history"></div>
+  <hr>
+  <div id="setupSection">
+    <label>Google Apps Script URL:</label>
+    <input type="text" id="scriptUrl" placeholder="Paste your deployed script URL">
+    <button id="saveUrl">Save URL</button>
+  </div>
+  <div id="status">Set up script URL below</div>
+  <script src="popup.js"></script>
+</body>
+</html>

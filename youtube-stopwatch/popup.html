@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      width: 200px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      margin: 0;
+    }
+    h2 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      color: #fff;
+      text-align: center;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-bottom: 6px;
+    }
+    #startBtn {
+      background: #27ae60;
+    }
+    #startBtn:hover {
+      background: #219a52;
+    }
+    #resetBtn {
+      background: #e74c3c;
+    }
+    #resetBtn:hover {
+      background: #c0392b;
+    }
+    #removeBtn {
+      background: #7f8c8d;
+    }
+    #removeBtn:hover {
+      background: #636e72;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 12px;
+      text-align: center;
+      min-height: 18px;
+      color: #aaa;
+    }
+    .success { color: #2ecc71 !important; }
+    .error { color: #e74c3c !important; }
+  </style>
+</head>
+<body>
+  <h2>Stopwatch</h2>
+  <button id="startBtn">Start / Pause</button>
+  <button id="resetBtn">Reset</button>
+  <button id="removeBtn">Remove</button>
+  <div id="status">Works on YouTube watch pages</div>
+  <script src="popup.js"></script>
+</body>
+</html>

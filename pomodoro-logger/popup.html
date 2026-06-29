@@ -143,6 +143,23 @@
     .history-entry .work { color: #2ecc71; }
     .history-entry .break { color: #e67e22; }
     .history-entry .custom { color: #8e44ad; }
+    .beats-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .beats-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #aaa;
+      cursor: pointer;
+      user-select: none;
+    }
+    .beats-label input[type="checkbox"] {
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -152,6 +169,12 @@
   <div class="btn-row">
     <button id="workBtn">Work</button>
     <button id="breakBtn">Break</button>
+  </div>
+  <div class="beats-row">
+    <label class="beats-label">
+      <input type="checkbox" id="beatsToggle" checked>
+      🔔 Chime alert (work 25m / break 5m)
+    </label>
   </div>
   <button id="customBtn">Custom</button>
   <input type="text" id="customInput" placeholder="Type activity, press Enter">

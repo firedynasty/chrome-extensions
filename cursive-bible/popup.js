@@ -146,10 +146,10 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
   var savedVerse = parseInt(localStorage.getItem('cursive-bible-verse-' + bookIdx + '-' + chIdx) || '0');
   var bucketIndex = Math.min(savedVerse, currentVerses.length - 1);
   var fontSize = parseInt(localStorage.getItem('cursive-size') || '52');
-  var slowMode = localStorage.getItem('cursive-slow') === 'true';
   var autoAdvance = localStorage.getItem('cursive-auto') === 'true';
   var repeatMode = localStorage.getItem('cursive-repeat') === 'true';
   var revealMode = localStorage.getItem('cursive-reveal') === 'true';
+  var syllableMode = localStorage.getItem('cursive-syllable') === 'true';
   var animTimer = null;
   var animRunning = false;
 
@@ -157,6 +157,52 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
     localStorage.setItem('cursive-bible-last-book', currentBookIdx);
     localStorage.setItem('cursive-bible-last-ch', currentChIdx);
     localStorage.setItem('cursive-bible-verse-' + currentBookIdx + '-' + currentChIdx, bucketIndex);
+  }
+
+  function syllabifyCore(word) {
+    if (word.length <= 2) return word;
+    var w = word.toLowerCase();
+    var syls = [];
+    var vowels = 'aeiouy';
+    var isV = function(c) { return vowels.indexOf(c) !== -1; };
+    var i = 0;
+    var cur = '';
+    while (i < w.length) {
+      cur += word[i];
+      if (isV(w[i])) {
+        // Consume consecutive vowels (diphthongs)
+        while (i + 1 < w.length && isV(w[i + 1])) { i++; cur += word[i]; }
+        // Look ahead at consonants after this vowel cluster
+        var consCount = 0;
+        var j = i + 1;
+        while (j < w.length && !isV(w[j])) { consCount++; j++; }
+        if (j < w.length && consCount > 0) {
+          // There are more vowels ahead — split consonants between syllables
+          var keep = consCount <= 1 ? 0 : (consCount === 2 ? 1 : consCount - 1);
+          // Handle common digraphs: don't split th, sh, ch, ph, wh, bl, cl, fl, gl, pl, sl, br, cr, dr, fr, gr, pr, tr
+          var afterKeep = w.substring(i + 1 + keep, i + 1 + consCount);
+          if (afterKeep.length >= 2) {
+            var dig = afterKeep.substring(0, 2);
+            var digraphs = ['th','sh','ch','ph','wh','bl','cl','fl','gl','pl','sl','br','cr','dr','fr','gr','pr','tr','sk','sp','st','sc'];
+            if (digraphs.indexOf(dig) !== -1 && keep > 0) keep--;
+          }
+          for (var k = 0; k < keep; k++) { i++; cur += word[i]; }
+          syls.push(cur);
+          cur = '';
+        }
+      }
+      i++;
+    }
+    if (cur) syls.push(cur);
+    return syls.length > 1 ? syls.join('\u00B7') : word;
+  }
+
+  function syllabifyWord(w) {
+    var m = w.match(/^(\W*)(.*?)(\W*)$/);
+    if (!m) return w;
+    var lead = m[1], core = m[2], trail = m[3];
+    if (!core) return w;
+    return lead + syllabifyCore(core) + trail;
   }
 
   function loadBibleData() {
@@ -494,18 +540,33 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
   };
   toolbar.appendChild(nextChBtn);
 
-  // Slow toggle
-  var slowLabel = document.createElement('label');
-  var slowCb = document.createElement('input');
-  slowCb.type = 'checkbox';
-  slowCb.checked = slowMode;
-  slowCb.onchange = function() {
-    slowMode = slowCb.checked;
-    localStorage.setItem('cursive-slow', slowMode);
+  // Copy button
+  var copyBtn = document.createElement('button');
+  copyBtn.style.background = '#6b7280';
+  copyBtn.textContent = 'Copy \\';
+  copyBtn.title = 'Copy current verse text to clipboard';
+  copyBtn.onclick = function() {
+    var verse = currentVerses[bucketIndex];
+    navigator.clipboard.writeText(verse).then(function() {
+      copyBtn.textContent = 'Copied!';
+      setTimeout(function() { copyBtn.textContent = 'Copy \\'; }, 1500);
+    });
   };
-  slowLabel.appendChild(slowCb);
-  slowLabel.appendChild(document.createTextNode(' Slow'));
-  toolbar.appendChild(slowLabel);
+  toolbar.appendChild(copyBtn);
+
+  // Syllable toggle
+  var sylBtn = document.createElement('button');
+  sylBtn.style.background = syllableMode ? '#4338ca' : '#6366f1';
+  sylBtn.textContent = syllableMode ? 'Syl: ON' : 'Syllable';
+  sylBtn.title = 'Show syllable breaks';
+  sylBtn.onclick = function() {
+    syllableMode = !syllableMode;
+    localStorage.setItem('cursive-syllable', syllableMode);
+    sylBtn.textContent = syllableMode ? 'Syl: ON' : 'Syllable';
+    sylBtn.style.background = syllableMode ? '#4338ca' : '#6366f1';
+    renderAndAnimate();
+  };
+  toolbar.appendChild(sylBtn);
 
   // Font size
   var sizeDown = document.createElement('button');
@@ -585,7 +646,7 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
   // Output area
   var outputArea = document.createElement('div');
   outputArea.className = MODAL_ID + '-output';
-  outputArea.style.cssText = "font-family:'Alex Brush',cursive; font-size:" + fontSize + "px; line-height:1.25; color:#1a1209; word-break:break-word;";
+  outputArea.style.cssText = "font-family:'Alex Brush',cursive; font-size:" + fontSize + "px; font-weight:bold; line-height:1.25; color:#1a1209; word-break:break-word;";
   panel.appendChild(outputArea);
 
   document.body.appendChild(panel);
@@ -617,6 +678,9 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       outputArea.scrollTop -= 40;
+    } else if (e.key === '\\') {
+      e.preventDefault();
+      copyBtn.click();
     }
   }
   document.addEventListener('keydown', onKey);
@@ -647,7 +711,7 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
     words.forEach(function(word, i) {
       var span = document.createElement('span');
       span.className = MODAL_ID + '-word';
-      span.textContent = word + ' ';
+      span.textContent = (syllableMode ? syllabifyWord(word) : word) + ' ';
       outputArea.appendChild(span);
       spans.push(span);
     });
@@ -659,10 +723,8 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
     }
 
     // Speed 3 hardcoded (matching BibleApp level 3)
-    var baseFadeMs = 350;
-    var baseDelayMs = 280;
-    var fadeMs = slowMode ? Math.round(baseFadeMs * 1.8) : baseFadeMs;
-    var delayMs = slowMode ? Math.round(baseDelayMs * 1.8) : baseDelayMs;
+    var fadeMs = 350;
+    var delayMs = 280;
 
     // Animate
     animRunning = true;

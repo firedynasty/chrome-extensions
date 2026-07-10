@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Quick Notes",
+  "name": "YouTube Links",
   "version": "1.0",
-  "description": "Save and load notes per-site from any page — opens a modal overlay with localStorage persistence",
+  "description": "Manage YouTube video links on any page — opens a side panel overlay with localStorage persistence",
   "permissions": ["activeTab", "scripting", "storage"],
   "icons": {
     "48": "icon48.png",

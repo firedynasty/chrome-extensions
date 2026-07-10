@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Cursive Bible",
+  "version": "1.0",
+  "description": "Cursive writing animation for Bible verses — select book and chapter, watch verses appear word by word in elegant handwriting",
+  "permissions": ["activeTab", "scripting"],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "web_accessible_resources": [{
+    "resources": ["en_kjv.json"],
+    "matches": ["<all_urls>"]
+  }]
+}

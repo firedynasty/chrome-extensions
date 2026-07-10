@@ -7,13 +7,15 @@ document.getElementById('toggleBtn').addEventListener('click', async () => {
       target: { tabId: tab.id },
       func: toggleNotesPanel
     });
-    status.textContent = 'Panel toggled!';
-    status.className = 'success';
+    window.close();
   } catch (err) {
     status.textContent = 'Cannot inject on this page';
     status.className = 'error';
   }
 });
+
+// Auto-inject on popup open
+document.getElementById('toggleBtn').click();
 
 function toggleNotesPanel() {
   const PANEL_ID = '__ext_quick_notes_panel';

@@ -1,11 +1,11 @@
-# Modal-to-Notes — Chrome Extension
+# YouTube Links — Chrome Extension
 
 A Chrome extension that opens a side panel overlay on any page to manage YouTube video entries. Saves to the same `pmEntries` localStorage key used by the YouTube Viewer's Toggle modal, so entries stay in sync.
 
 ## How It Works
 
 1. Click the extension icon on any page
-2. Hit **Toggle Notes Panel** — a side panel slides in on the right
+2. Hit **Toggle Links Panel** — a side panel slides in on the right
 3. Paste YouTube URL(s) and hit **Add** or press Enter
 4. Entries save to `pmEntries` in localStorage — the same key your YouTube Viewer reads
 5. Go back to your YouTube Viewer, hit Toggle — your entries are there
@@ -53,7 +53,7 @@ There is a toggle button in the navbar that allows for saving YouTube media link
 |------|-------------|
 | `manifest.json` | Manifest V3 config — `activeTab` + `scripting` + `storage` permissions |
 | `popup.html` | Extension popup UI |
-| `popup.js` | Injects the notes panel overlay into the active tab |
+| `popup.js` | Injects the YouTube links panel overlay into the active tab |
 | `icon48.png` | Toolbar icon (48x48) |
 | `icon128.png` | Store icon (128x128) |
 

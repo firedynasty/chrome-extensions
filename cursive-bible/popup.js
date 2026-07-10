@@ -270,9 +270,32 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
     if (idx !== undefined) bookNameMap[k] = idx;
   });
 
+  var wordNums = {zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,hundred:100};
+  function wordsToNum(s) {
+    s = s.trim().toLowerCase();
+    if (!isNaN(Number(s)) && s !== '') return Number(s);
+    var n = 0;
+    s.replace(/-/g, ' ').split(/\s+/).forEach(function(x) {
+      if (wordNums[x] !== undefined) n += wordNums[x];
+    });
+    return n > 0 ? n : null;
+  }
+
   function parseRef(input) {
     var trimmed = input.trim().toLowerCase();
     if (!trimmed) return null;
+    // Plain number or word-number → chapter in current book (e.g. "19", "nineteen", "twenty-two")
+    var numOnly = trimmed.match(/^(\d+)(?::(\d+))?$/);
+    if (numOnly) {
+      var ch = parseInt(numOnly[1]);
+      var vs = numOnly[2] ? parseInt(numOnly[2]) : null;
+      return { bookIdx: currentBookIdx, chapter: ch - 1, verse: vs };
+    }
+    // Try word-based number (e.g. "nineteen", "twenty two", "twenty-two")
+    var wordCh = wordsToNum(trimmed);
+    if (wordCh !== null) {
+      return { bookIdx: currentBookIdx, chapter: wordCh - 1, verse: null };
+    }
     // Match: bookName chapter:verse  or  bookName chapter
     var m = trimmed.match(/^(\d?\s*[a-z]+(?:\s+of\s+[a-z]+)?(?:\s+[a-z]+)?)\s+(\d+)(?::(\d+))?$/);
     if (m) {
@@ -308,7 +331,7 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
     box.appendChild(refInput);
     var hint = document.createElement('div');
     hint.style.cssText = 'font-size:11px;color:#888;margin-top:6px;';
-    hint.textContent = 'Book Chapter:Verse — abbreviations OK';
+    hint.textContent = 'Book Chapter:Verse, or number/word for chapter (e.g. 19, nineteen)';
     box.appendChild(hint);
     var errMsg = document.createElement('div');
     errMsg.style.cssText = 'font-size:12px;color:#c0392b;margin-top:6px;display:none;';

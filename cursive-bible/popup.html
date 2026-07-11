@@ -70,10 +70,21 @@
 </head>
 <body>
   <h2>Cursive Bible</h2>
-  <label>Book</label>
-  <select id="bookSelect"></select>
-  <label>Chapter</label>
-  <select id="chapterSelect"></select>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+    <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer;">
+      <input type="checkbox" id="groupToggle"> Groupings
+    </label>
+  </div>
+  <div id="groupSection" style="display:none;">
+    <label>Collection</label>
+    <select id="groupSelect"></select>
+  </div>
+  <div id="bibleSection">
+    <label>Book</label>
+    <select id="bookSelect"></select>
+    <label>Chapter</label>
+    <select id="chapterSelect"></select>
+  </div>
   <button id="openBtn">Open Cursive</button>
   <div id="status"></div>
   <script src="popup.js"></script>

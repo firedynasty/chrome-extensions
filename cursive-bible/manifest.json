@@ -16,7 +16,7 @@
     }
   },
   "web_accessible_resources": [{
-    "resources": ["en_kjv.json"],
+    "resources": ["en_kjv.json", "all_groupings.json"],
     "matches": ["<all_urls>"]
   }]
 }

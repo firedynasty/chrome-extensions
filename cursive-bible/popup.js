@@ -16,6 +16,7 @@ const BOOK_NAMES = [
 ];
 
 let bibleData = null;
+let groupingsData = null;
 
 async function loadBible() {
   const url = chrome.runtime.getURL('en_kjv.json');
@@ -23,6 +24,32 @@ async function loadBible() {
   const text = await res.text();
   // Handle BOM
   bibleData = JSON.parse(text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text);
+}
+
+async function loadGroupings() {
+  const url = chrome.runtime.getURL('all_groupings.json');
+  const res = await fetch(url);
+  groupingsData = await res.json();
+}
+
+function populateGroupings() {
+  const sel = document.getElementById('groupSelect');
+  sel.innerHTML = '';
+  if (!groupingsData) return;
+  Object.keys(groupingsData).forEach((name) => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name + ' (' + groupingsData[name].length + ')';
+    sel.appendChild(opt);
+  });
+  const last = localStorage.getItem('cursive-bible-group') || '';
+  if (last && groupingsData[last]) sel.value = last;
+}
+
+function toggleGroupingsMode(on) {
+  document.getElementById('bibleSection').style.display = on ? 'none' : '';
+  document.getElementById('groupSection').style.display = on ? '' : 'none';
+  localStorage.setItem('cursive-bible-groupings-mode', on ? '1' : '0');
 }
 
 function populateBooks() {
@@ -95,27 +122,47 @@ document.getElementById('chapterSelect').addEventListener('change', () => {
   localStorage.setItem('cursive-bible-ch-' + bookIdx, document.getElementById('chapterSelect').value);
 });
 
+document.getElementById('groupToggle').addEventListener('change', () => {
+  const on = document.getElementById('groupToggle').checked;
+  toggleGroupingsMode(on);
+});
+
+document.getElementById('groupSelect').addEventListener('change', () => {
+  localStorage.setItem('cursive-bible-group', document.getElementById('groupSelect').value);
+});
+
 document.getElementById('openBtn').addEventListener('click', async () => {
   const status = document.getElementById('status');
-  const bookIdx = parseInt(document.getElementById('bookSelect').value);
-  const chIdx = parseInt(document.getElementById('chapterSelect').value);
-  const bookName = BOOK_NAMES[bookIdx];
-  const verses = bibleData[bookIdx].chapters[chIdx];
-  const chapterNum = chIdx + 1;
-
-  // Save selections
-  localStorage.setItem('cursive-bible-book', bookIdx);
-  localStorage.setItem('cursive-bible-ch-' + bookIdx, chIdx);
-
+  const groupMode = document.getElementById('groupToggle').checked;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   try {
-    const extUrl = chrome.runtime.getURL('en_kjv.json');
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: injectCursiveModal,
-      args: [verses, bookName, chapterNum, bookIdx, chIdx, extUrl, BOOK_NAMES]
-    });
+    if (groupMode) {
+      const collectionName = document.getElementById('groupSelect').value;
+      const entries = groupingsData[collectionName];
+      localStorage.setItem('cursive-bible-group', collectionName);
+      const groupingsUrl = chrome.runtime.getURL('all_groupings.json');
+      const extUrl = chrome.runtime.getURL('en_kjv.json');
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: injectCursiveModal,
+        args: [entries.map(e => e.text), collectionName, 0, -1, -1, extUrl, BOOK_NAMES, { collectionName, entries, groupingsUrl }]
+      });
+    } else {
+      const bookIdx = parseInt(document.getElementById('bookSelect').value);
+      const chIdx = parseInt(document.getElementById('chapterSelect').value);
+      const bookName = BOOK_NAMES[bookIdx];
+      const verses = bibleData[bookIdx].chapters[chIdx];
+      const chapterNum = chIdx + 1;
+      localStorage.setItem('cursive-bible-book', bookIdx);
+      localStorage.setItem('cursive-bible-ch-' + bookIdx, chIdx);
+      const extUrl = chrome.runtime.getURL('en_kjv.json');
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: injectCursiveModal,
+        args: [verses, bookName, chapterNum, bookIdx, chIdx, extUrl, BOOK_NAMES, null]
+      });
+    }
     window.close();
   } catch (err) {
     status.textContent = 'Cannot inject on this page';
@@ -123,19 +170,30 @@ document.getElementById('openBtn').addEventListener('click', async () => {
   }
 });
 
-loadBible().then(async () => {
+Promise.all([loadBible(), loadGroupings()]).then(async () => {
   populateBooks();
+  populateGroupings();
+  // Restore groupings mode
+  const wasGroupMode = localStorage.getItem('cursive-bible-groupings-mode') === '1';
+  document.getElementById('groupToggle').checked = wasGroupMode;
+  toggleGroupingsMode(wasGroupMode);
   await restoreFromPage();
   // Auto-inject the panel immediately
   document.getElementById('openBtn').click();
 });
 
-function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJsonUrl, bookNames) {
+function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJsonUrl, bookNames, groupingInfo) {
   var MODAL_ID = '__cursive_bible_modal';
   var existing = document.getElementById(MODAL_ID);
   if (existing) existing.remove();
 
   // --- State ---
+  var isGroupMode = !!groupingInfo;
+  var groupCollectionName = isGroupMode ? groupingInfo.collectionName : null;
+  var groupEntries = isGroupMode ? groupingInfo.entries : null;
+  var groupingsUrl = isGroupMode ? groupingInfo.groupingsUrl : null;
+  var allGroupings = null; // loaded on demand for collection switching
+
   var currentVerses = verses;
   var currentBookName = bookName;
   var currentChapterNum = chapterNum;
@@ -143,7 +201,12 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
   var currentChIdx = chIdx;
   var bibleData = null; // loaded on demand for chapter nav
 
-  var savedVerse = parseInt(localStorage.getItem('cursive-bible-verse-' + bookIdx + '-' + chIdx) || '0');
+  var savedVerse;
+  if (isGroupMode) {
+    savedVerse = parseInt(localStorage.getItem('cursive-bible-gverse-' + groupCollectionName) || '0');
+  } else {
+    savedVerse = parseInt(localStorage.getItem('cursive-bible-verse-' + bookIdx + '-' + chIdx) || '0');
+  }
   var bucketIndex = Math.min(savedVerse, currentVerses.length - 1);
   var fontSize = parseInt(localStorage.getItem('cursive-size') || '52');
   var autoAdvance = localStorage.getItem('cursive-auto') === 'true';
@@ -154,9 +217,13 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
   var animRunning = false;
 
   function savePosition() {
-    localStorage.setItem('cursive-bible-last-book', currentBookIdx);
-    localStorage.setItem('cursive-bible-last-ch', currentChIdx);
-    localStorage.setItem('cursive-bible-verse-' + currentBookIdx + '-' + currentChIdx, bucketIndex);
+    if (isGroupMode) {
+      localStorage.setItem('cursive-bible-gverse-' + groupCollectionName, bucketIndex);
+    } else {
+      localStorage.setItem('cursive-bible-last-book', currentBookIdx);
+      localStorage.setItem('cursive-bible-last-ch', currentChIdx);
+      localStorage.setItem('cursive-bible-verse-' + currentBookIdx + '-' + currentChIdx, bucketIndex);
+    }
   }
 
   function syllabifyCore(word) {
@@ -459,7 +526,7 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
   // Title
   var title = document.createElement('span');
   title.style.cssText = 'font-size:13px;color:#5a4a30;font-weight:700;margin-right:4px;';
-  title.textContent = bookName + ' ' + chapterNum;
+  title.textContent = isGroupMode ? groupCollectionName : (bookName + ' ' + chapterNum);
   toolbar.appendChild(title);
 
   // Ref button
@@ -517,26 +584,36 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
   };
   toolbar.appendChild(nextBtn);
 
-  // Next Chapter
+  // Next Chapter / Next Collection
   var nextChBtn = document.createElement('button');
   nextChBtn.style.background = 'linear-gradient(45deg,#b8860b,#d4a855)';
-  nextChBtn.textContent = 'Next Ch';
-  nextChBtn.title = 'Next chapter';
+  nextChBtn.textContent = isGroupMode ? 'Next Col' : 'Next Ch';
+  nextChBtn.title = isGroupMode ? 'Next collection' : 'Next chapter';
   nextChBtn.onclick = function() {
-    loadBibleData().then(function(data) {
-      var newBookIdx = currentBookIdx;
-      var newChIdx = currentChIdx + 1;
-      if (newChIdx >= data[newBookIdx].chapters.length) {
-        // Move to next book chapter 1
-        if (newBookIdx < data.length - 1) {
-          newBookIdx++;
-          newChIdx = 0;
-        } else {
-          return; // end of Bible
+    if (isGroupMode) {
+      loadGroupingsData().then(function(data) {
+        var keys = Object.keys(data);
+        var curIdx = keys.indexOf(groupCollectionName);
+        if (curIdx < keys.length - 1) {
+          grpSelect.value = keys[curIdx + 1];
+          grpSelect.onchange();
         }
-      }
-      goToChapter(newBookIdx, newChIdx);
-    });
+      });
+    } else {
+      loadBibleData().then(function(data) {
+        var newBookIdx = currentBookIdx;
+        var newChIdx = currentChIdx + 1;
+        if (newChIdx >= data[newBookIdx].chapters.length) {
+          if (newBookIdx < data.length - 1) {
+            newBookIdx++;
+            newChIdx = 0;
+          } else {
+            return;
+          }
+        }
+        goToChapter(newBookIdx, newChIdx);
+      });
+    }
   };
   toolbar.appendChild(nextChBtn);
 
@@ -547,6 +624,9 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
   copyBtn.title = 'Copy current verse text to clipboard';
   copyBtn.onclick = function() {
     var verse = currentVerses[bucketIndex];
+    if (isGroupMode && groupEntries && groupEntries[bucketIndex]) {
+      verse = groupEntries[bucketIndex].reference + ' — ' + verse;
+    }
     navigator.clipboard.writeText(verse).then(function() {
       copyBtn.textContent = 'Copied!';
       setTimeout(function() { copyBtn.textContent = 'Copy \\'; }, 1500);
@@ -629,6 +709,103 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
   revealLabel.appendChild(document.createTextNode(' Reveal'));
   toolbar.appendChild(revealLabel);
 
+  // Groupings toggle + dropdown (in toolbar)
+  var grpLabel = document.createElement('label');
+  var grpCb = document.createElement('input');
+  grpCb.type = 'checkbox';
+  grpCb.checked = isGroupMode;
+  grpLabel.appendChild(grpCb);
+  grpLabel.appendChild(document.createTextNode(' Grp'));
+  toolbar.appendChild(grpLabel);
+
+  var grpSelect = document.createElement('select');
+  grpSelect.title = 'Switch collection';
+  grpSelect.style.display = isGroupMode ? '' : 'none';
+  // Populate once groupings are loaded
+  function populateGrpSelect(data) {
+    grpSelect.innerHTML = '';
+    Object.keys(data).forEach(function(name) {
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      grpSelect.appendChild(opt);
+    });
+    if (groupCollectionName) grpSelect.value = groupCollectionName;
+  }
+
+  function loadGroupingsData() {
+    if (allGroupings) return Promise.resolve(allGroupings);
+    var url = groupingsUrl || bibleJsonUrl.replace('en_kjv.json', 'all_groupings.json');
+    return fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+      allGroupings = data;
+      populateGrpSelect(data);
+      return data;
+    });
+  }
+
+  function switchToGroup(name) {
+    loadGroupingsData().then(function(data) {
+      isGroupMode = true;
+      groupCollectionName = name;
+      groupEntries = data[name];
+      currentVerses = groupEntries.map(function(e) { return e.text; });
+      bucketIndex = parseInt(localStorage.getItem('cursive-bible-gverse-' + name) || '0');
+      bucketIndex = Math.min(bucketIndex, currentVerses.length - 1);
+      title.textContent = groupCollectionName;
+      nextChBtn.textContent = 'Next Col';
+      nextChBtn.title = 'Next collection';
+      verseSelect.innerHTML = '';
+      currentVerses.forEach(function(v, i) {
+        var opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = 'v' + (i + 1);
+        verseSelect.appendChild(opt);
+      });
+      verseSelect.value = bucketIndex;
+      localStorage.setItem('cursive-bible-group', name);
+      localStorage.setItem('cursive-bible-groupings-mode', '1');
+      savePosition();
+      renderAndAnimate();
+    });
+  }
+
+  function switchToBible() {
+    isGroupMode = false;
+    groupCollectionName = null;
+    groupEntries = null;
+    nextChBtn.textContent = 'Next Ch';
+    nextChBtn.title = 'Next chapter';
+    localStorage.setItem('cursive-bible-groupings-mode', '0');
+    // Restore last Bible position
+    loadBibleData().then(function(data) {
+      var lastBook = parseInt(localStorage.getItem('cursive-bible-last-book') || '0');
+      var lastCh = parseInt(localStorage.getItem('cursive-bible-last-ch') || '0');
+      goToChapter(lastBook, lastCh);
+    });
+  }
+
+  grpCb.onchange = function() {
+    if (grpCb.checked) {
+      grpSelect.style.display = '';
+      loadGroupingsData().then(function(data) {
+        var name = grpSelect.value || Object.keys(data)[0];
+        switchToGroup(name);
+      });
+    } else {
+      grpSelect.style.display = 'none';
+      switchToBible();
+    }
+  };
+
+  grpSelect.onchange = function() {
+    switchToGroup(grpSelect.value);
+  };
+
+  toolbar.appendChild(grpSelect);
+
+  // Pre-load groupings dropdown if already in group mode
+  if (isGroupMode) loadGroupingsData();
+
   // Close
   var closeBtn = document.createElement('button');
   closeBtn.style.cssText = 'background:#c0392b; margin-left:auto;';
@@ -702,7 +879,11 @@ function injectCursiveModal(verses, bookName, chapterNum, bookIdx, chIdx, bibleJ
     // Verse reference
     var refDiv = document.createElement('div');
     refDiv.className = MODAL_ID + '-verse-ref';
-    refDiv.textContent = currentBookName + ' ' + currentChapterNum + ':' + verseNum;
+    if (isGroupMode && groupEntries && groupEntries[bucketIndex]) {
+      refDiv.textContent = groupEntries[bucketIndex].reference;
+    } else {
+      refDiv.textContent = currentBookName + ' ' + currentChapterNum + ':' + verseNum;
+    }
     outputArea.appendChild(refDiv);
 
     // Split into words

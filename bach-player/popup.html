@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      width: 320px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      margin: 0;
+    }
+    h2 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      color: #fff;
+      text-align: center;
+    }
+    .selector-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+    .selector-row label {
+      font-size: 11px;
+      color: #81C784;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .selector-row select {
+      flex: 1;
+      background: #16213e;
+      color: #e0e0e0;
+      border: 1px solid rgba(76, 175, 80, 0.4);
+      border-radius: 6px;
+      padding: 5px 6px;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      min-width: 0;
+    }
+    .selector-row select:focus {
+      outline: none;
+      border-color: #4CAF50;
+      box-shadow: 0 0 6px rgba(76, 175, 80, 0.3);
+    }
+    #trackTitle {
+      text-align: center;
+      font-size: 13px;
+      color: #c9a84c;
+      margin-bottom: 12px;
+      min-height: 36px;
+      line-height: 1.4;
+    }
+    #progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #16213e;
+      border-radius: 3px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    #progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #c9a84c;
+      border-radius: 3px;
+      transition: width 0.3s linear;
+    }
+    #timeDisplay {
+      text-align: center;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 12px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+      transition: background 0.2s;
+      background: #2c3e50;
+    }
+    button:hover {
+      background: #34495e;
+    }
+    #playBtn {
+      background: #c9a84c;
+      color: #1a1a2e;
+      font-size: 20px;
+    }
+    #playBtn:hover {
+      background: #d4b95c;
+    }
+    #status {
+      text-align: center;
+      font-size: 11px;
+      color: #666;
+      margin-top: 4px;
+    }
+    .volume-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .volume-row span {
+      font-size: 14px;
+    }
+    .volume-row input[type="range"] {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      background: #16213e;
+      border-radius: 2px;
+      outline: none;
+    }
+    .volume-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #c9a84c;
+      cursor: pointer;
+    }
+    #metBpmSlider::-webkit-slider-thumb,
+    #metVolSlider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #c9a84c;
+      cursor: pointer;
+    }
+    #trackList {
+      margin-top: 10px;
+      max-height: 150px;
+      overflow-y: auto;
+      border-top: 1px solid #333;
+      padding-top: 8px;
+    }
+    .track-item {
+      padding: 5px 8px;
+      font-size: 11px;
+      color: #888;
+      cursor: pointer;
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-item:hover {
+      background: #16213e;
+      color: #e0e0e0;
+    }
+    .track-item.active {
+      color: #c9a84c;
+      background: #16213e;
+    }
+  </style>
+</head>
+<body>
+  <h2>Music Player</h2>
+  <div class="selector-row">
+    <label for="genreSelect">Genre:</label>
+    <select id="genreSelect"></select>
+    <label for="albumSelect">Album:</label>
+    <select id="albumSelect"></select>
+  </div>
+  <div id="trackTitle">Click play to start</div>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+  <div id="timeDisplay">0:00 / 0:00</div>
+  <div class="btn-row">
+    <button id="prevBtn">&#9664;&#9664;</button>
+    <button id="playBtn">&#9654;</button>
+    <button id="nextBtn">&#9654;&#9654;</button>
+  </div>
+  <div class="btn-row">
+    <button id="shuffleBtn" title="Shuffle">&#128256;</button>
+    <button id="noiseBtn" title="White Noise">&#127754;</button>
+  </div>
+  <div id="metronomePanel" style="border-top:1px solid #333; padding-top:8px; margin-bottom:8px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <span style="font-size:11px; color:#81C784; font-weight:600;">BPM</span>
+      <input type="range" id="metBpmSlider" min="40" max="240" value="96" style="flex:1; height:4px; -webkit-appearance:none; background:#16213e; border-radius:2px; outline:none;">
+      <span id="metBpmLabel" style="font-size:12px; color:#c9a84c; min-width:28px; text-align:right;">96</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <span style="font-size:11px; color:#81C784; font-weight:600;">Vol</span>
+      <input type="range" id="metVolSlider" min="0" max="100" value="50" style="flex:1; height:4px; -webkit-appearance:none; background:#16213e; border-radius:2px; outline:none;">
+    </div>
+    <div style="display:flex; gap:6px;">
+      <button id="metStartStopBtn" style="flex:1; padding:8px; border:none; border-radius:6px; background:#2c3e50; color:#fff; font-size:14px; cursor:pointer;">&#9654; Start</button>
+      <button id="metTapBtn" style="flex:1; padding:8px; border:none; border-radius:6px; background:#2c3e50; color:#fff; font-size:14px; cursor:pointer;">&#128400; Tap</button>
+    </div>
+  </div>
+  <div class="volume-row">
+    <span>&#128264;</span>
+    <input type="range" id="volume" min="0" max="100" value="80">
+    <span>&#128266;</span>
+  </div>
+  <div id="trackList"></div>
+  <div id="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

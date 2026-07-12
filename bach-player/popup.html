@@ -179,6 +179,11 @@
     <select id="albumSelect"></select>
   </div>
   <div id="trackTitle">Click play to start</div>
+  <div class="volume-row">
+    <span>&#128264;</span>
+    <input type="range" id="volume" min="0" max="100" value="80">
+    <span>&#128266;</span>
+  </div>
   <div id="progress-bar"><div id="progress-fill"></div></div>
   <div id="timeDisplay">0:00 / 0:00</div>
   <div class="btn-row">
@@ -221,11 +226,6 @@
       <button id="metStartStopBtn" style="flex:1; padding:8px; border:none; border-radius:6px; background:#2c3e50; color:#fff; font-size:14px; cursor:pointer;">&#9654; Start</button>
       <button id="metTapBtn" style="flex:1; padding:8px; border:none; border-radius:6px; background:#2c3e50; color:#fff; font-size:14px; cursor:pointer;">&#128400; Tap</button>
     </div>
-  </div>
-  <div class="volume-row">
-    <span>&#128264;</span>
-    <input type="range" id="volume" min="0" max="100" value="80">
-    <span>&#128266;</span>
   </div>
   <div id="trackList"></div>
   <div id="status"></div>

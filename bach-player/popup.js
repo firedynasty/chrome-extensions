@@ -210,6 +210,14 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
+document.addEventListener('keydown', (e) => {
+  if (e.key === '[') {
+    document.getElementById('metTempoPrev').click();
+  } else if (e.key === ']') {
+    document.getElementById('metTempoNext').click();
+  }
+});
+
 // Init dropdowns from local file, then try to get playback state
 initDropdowns().then(() => {
   // Small delay to let service worker wake up

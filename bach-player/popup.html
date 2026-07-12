@@ -198,8 +198,8 @@
   <div id="metronomePanel" style="border-top:1px solid #333; padding-top:8px; margin-bottom:8px;">
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
       <span style="font-size:11px; color:#81C784; font-weight:600;">BPM</span>
-      <input type="range" id="metBpmSlider" min="40" max="240" value="96" style="flex:1; height:4px; -webkit-appearance:none; background:#16213e; border-radius:2px; outline:none;">
-      <span id="metBpmLabel" style="font-size:12px; color:#c9a84c; min-width:28px; text-align:right;">96</span>
+      <input type="range" id="metBpmSlider" min="40" max="240" value="92" style="flex:1; height:4px; -webkit-appearance:none; background:#16213e; border-radius:2px; outline:none;">
+      <span id="metBpmLabel" style="font-size:12px; color:#c9a84c; min-width:28px; text-align:right;">92</span>
     </div>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
       <span style="font-size:11px; color:#81C784; font-weight:600;">Vol</span>
@@ -207,23 +207,22 @@
     </div>
     <div style="display:flex; align-items:center; gap:4px; margin-bottom:6px;">
       <span style="font-size:11px; color:#81C784; font-weight:600; min-width:28px;">Tempo</span>
-      <button id="metTempoPrev" style="padding:4px 6px; border:none; border-radius:4px; background:#2c3e50; color:#fff; font-size:11px; cursor:pointer;">&laquo;</button>
+      <button id="metTempoPrev" style="padding:4px 6px; border:none; border-radius:4px; background:#2c3e50; color:#fff; font-size:11px; cursor:pointer;">[ &laquo;</button>
       <select id="metTempoPreset" style="flex:1; background:#16213e; color:#e0e0e0; border:1px solid rgba(76,175,80,0.4); border-radius:6px; padding:4px 6px; font-size:11px; font-family:inherit; cursor:pointer;">
-        <option value="">- select -</option>
         <option value="30">Grave (30)</option>
         <option value="53">Largo (53)</option>
         <option value="71">Adagio (71)</option>
-        <option value="92">Andante (92)</option>
+        <option value="92" selected>Andante (92)</option>
         <option value="114">Moderato (114)</option>
         <option value="138">Allegro (138)</option>
         <option value="176">Vivace (176)</option>
         <option value="192">Presto (192)</option>
         <option value="220">Prestissimo (220)</option>
       </select>
-      <button id="metTempoNext" style="padding:4px 6px; border:none; border-radius:4px; background:#2c3e50; color:#fff; font-size:11px; cursor:pointer;">&raquo;</button>
+      <button id="metTempoNext" style="padding:4px 6px; border:none; border-radius:4px; background:#2c3e50; color:#fff; font-size:11px; cursor:pointer;">&raquo; ]</button>
     </div>
     <div style="display:flex; gap:6px;">
-      <button id="metStartStopBtn" style="flex:1; padding:8px; border:none; border-radius:6px; background:#2c3e50; color:#fff; font-size:14px; cursor:pointer;">&#9654; Start</button>
+      <button id="metStartStopBtn" style="flex:1; padding:8px; border:none; border-radius:6px; background:#2c3e50; color:#fff; font-size:14px; cursor:pointer;">&#9654; Start (\)</button>
       <button id="metTapBtn" style="flex:1; padding:8px; border:none; border-radius:6px; background:#2c3e50; color:#fff; font-size:14px; cursor:pointer;">&#128400; Tap</button>
     </div>
   </div>

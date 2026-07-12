@@ -57,7 +57,7 @@ function applyState(state) {
   if (state.metVolume !== undefined) {
     metVolSlider.value = state.metVolume;
   }
-  metStartStopBtn.innerHTML = state.metIsPlaying ? '&#9646;&#9646; Stop' : '&#9654; Start';
+  metStartStopBtn.innerHTML = state.metIsPlaying ? '&#9646;&#9646; Stop (\\)' : '&#9654; Start (\\)';
   metStartStopBtn.style.background = state.metIsPlaying ? '#c9a84c' : '#2c3e50';
   metStartStopBtn.style.color = state.metIsPlaying ? '#1a1a2e' : '#fff';
 
@@ -125,15 +125,22 @@ async function initDropdowns() {
 
     genreSelect.addEventListener('change', () => {
       loadAlbumOptions(genreSelect.value);
+      chrome.storage.local.set({ bachGenre: genreSelect.value, bachAlbum: 0 });
       send({ type: 'switchGenre', name: genreSelect.value });
     });
 
     albumSelect.addEventListener('change', () => {
+      chrome.storage.local.set({ bachAlbum: parseInt(albumSelect.value) });
       send({ type: 'switchAlbum', index: parseInt(albumSelect.value) });
     });
 
-    if (genres.length) {
-      loadAlbumOptions(genres[0]);
+    // Restore saved dropdown selection
+    const saved = await chrome.storage.local.get(['bachGenre', 'bachAlbum']);
+    const savedGenre = saved.bachGenre && genres.includes(saved.bachGenre) ? saved.bachGenre : genres[0];
+    genreSelect.value = savedGenre;
+    loadAlbumOptions(savedGenre);
+    if (saved.bachAlbum !== undefined) {
+      albumSelect.value = saved.bachAlbum;
     }
   } catch (e) {
     statusEl.textContent = 'Error loading playlists';
@@ -215,6 +222,8 @@ document.addEventListener('keydown', (e) => {
     document.getElementById('metTempoPrev').click();
   } else if (e.key === ']') {
     document.getElementById('metTempoNext').click();
+  } else if (e.key === '\\') {
+    metStartStopBtn.click();
   }
 });
 

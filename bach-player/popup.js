@@ -162,6 +162,37 @@ metVolSlider.addEventListener('input', () => {
 metStartStopBtn.addEventListener('click', () => send({ type: 'metToggle' }));
 metTapBtn.addEventListener('click', () => send({ type: 'metTap' }));
 
+const metTempoPreset = document.getElementById('metTempoPreset');
+
+function applyTempoPreset() {
+  const val = parseInt(metTempoPreset.value);
+  if (val) {
+    metBpmSlider.value = val;
+    metBpmLabel.textContent = val;
+    send({ type: 'metBpm', value: val });
+  }
+}
+
+metTempoPreset.addEventListener('change', applyTempoPreset);
+
+document.getElementById('metTempoPrev').addEventListener('click', () => {
+  const idx = metTempoPreset.selectedIndex;
+  if (idx > 1) {
+    metTempoPreset.selectedIndex = idx - 1;
+  } else {
+    metTempoPreset.selectedIndex = 1;
+  }
+  applyTempoPreset();
+});
+
+document.getElementById('metTempoNext').addEventListener('click', () => {
+  const idx = metTempoPreset.selectedIndex;
+  if (idx < metTempoPreset.options.length - 1) {
+    metTempoPreset.selectedIndex = idx + 1;
+  }
+  applyTempoPreset();
+});
+
 volumeSlider.addEventListener('input', () => {
   send({ type: 'volume', value: parseInt(volumeSlider.value) });
 });

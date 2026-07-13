@@ -16,44 +16,72 @@ const historyEl = document.getElementById('history');
 let timerInterval = null;
 let countdownInterval = null;
 
-// 5-minute countdown timer
+// Pomodoro mode: auto-cycles 25min work → 5min break → repeat
 const countdownDisplay = document.getElementById('countdownDisplay');
 const timerBtn = document.getElementById('timerBtn');
-const COUNTDOWN_MS = 5 * 60 * 1000;
+const pomPhaseLabel = document.getElementById('pomPhaseLabel');
+const WORK_MINUTES = 25;
+const BREAK_MINUTES = 5;
 
-chrome.storage.local.get(['countdownEndTime'], (data) => {
+function setPomPhaseUI(phase) {
+  pomPhaseLabel.textContent = phase === 'work' ? 'WORK' : 'BREAK';
+  pomPhaseLabel.style.color = phase === 'work' ? '#27ae60' : '#e67e22';
+}
+
+function resetPomodoroUI() {
+  countdownDisplay.textContent = '25:00';
+  countdownDisplay.classList.add('idle');
+  pomPhaseLabel.textContent = 'WORK';
+  pomPhaseLabel.style.color = '#555';
+  timerBtn.textContent = 'Pomodoro';
+  timerBtn.classList.remove('running');
+}
+
+// Restore pomodoro state on popup open
+chrome.storage.local.get(['countdownEndTime', 'pomodoroPhase'], (data) => {
   if (data.countdownEndTime) {
     const remaining = data.countdownEndTime - Date.now();
     if (remaining > 0) {
-      startCountdownDisplay(data.countdownEndTime);
+      const phase = data.pomodoroPhase || 'work';
+      setPomPhaseUI(phase);
+      startCountdownDisplay(data.countdownEndTime, phase);
     } else {
-      chrome.storage.local.remove('countdownEndTime');
+      chrome.storage.local.remove(['countdownEndTime', 'pomodoroPhase']);
     }
+  }
+});
+
+// Listen for phase changes from background (auto-cycle)
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.countdownEndTime && changes.countdownEndTime.newValue) {
+    chrome.storage.local.get(['pomodoroPhase'], (data) => {
+      const phase = data.pomodoroPhase || 'work';
+      setPomPhaseUI(phase);
+      startCountdownDisplay(changes.countdownEndTime.newValue, phase);
+    });
   }
 });
 
 timerBtn.addEventListener('click', () => {
   chrome.storage.local.get(['countdownEndTime'], (data) => {
     if (data.countdownEndTime && data.countdownEndTime > Date.now()) {
-      // Stop the timer
+      // Stop pomodoro
       clearInterval(countdownInterval);
-      chrome.storage.local.remove('countdownEndTime');
+      chrome.storage.local.remove(['countdownEndTime', 'pomodoroPhase']);
       chrome.runtime.sendMessage({ type: 'clearCountdown' });
-      countdownDisplay.textContent = '5:00';
-      countdownDisplay.classList.add('idle');
-      timerBtn.textContent = '5 Min Timer';
-      timerBtn.classList.remove('running');
+      resetPomodoroUI();
     } else {
-      // Start the timer
-      const endTime = Date.now() + COUNTDOWN_MS;
-      chrome.storage.local.set({ countdownEndTime: endTime });
-      chrome.runtime.sendMessage({ type: 'scheduleCountdown', delayMinutes: 5 });
-      startCountdownDisplay(endTime);
+      // Start pomodoro (work phase)
+      const endTime = Date.now() + WORK_MINUTES * 60 * 1000;
+      chrome.storage.local.set({ countdownEndTime: endTime, pomodoroPhase: 'work' });
+      chrome.runtime.sendMessage({ type: 'scheduleCountdown', delayMinutes: WORK_MINUTES });
+      setPomPhaseUI('work');
+      startCountdownDisplay(endTime, 'work');
     }
   });
 });
 
-function startCountdownDisplay(endTime) {
+function startCountdownDisplay(endTime, phase) {
   countdownDisplay.classList.remove('idle');
   timerBtn.textContent = 'Stop';
   timerBtn.classList.add('running');
@@ -63,13 +91,7 @@ function startCountdownDisplay(endTime) {
     if (remaining <= 0) {
       clearInterval(countdownInterval);
       countdownDisplay.textContent = '0:00';
-      chrome.storage.local.remove('countdownEndTime');
-      setTimeout(() => {
-        countdownDisplay.textContent = '5:00';
-        countdownDisplay.classList.add('idle');
-        timerBtn.textContent = '5 Min Timer';
-        timerBtn.classList.remove('running');
-      }, 2000);
+      // Background will auto-schedule next phase; UI updates via storage listener
       return;
     }
     const totalSecs = Math.ceil(remaining / 1000);
@@ -81,17 +103,71 @@ function startCountdownDisplay(endTime) {
   countdownInterval = setInterval(update, 1000);
 }
 
-// Load and sync beatsAlertEnabled toggle
-const beatsToggle = document.getElementById('beatsToggle');
-chrome.storage.local.get(['beatsAlertEnabled'], (data) => {
-  if (data.beatsAlertEnabled === false) beatsToggle.checked = false;
-});
-beatsToggle.addEventListener('change', function() {
-  chrome.storage.local.set({ beatsAlertEnabled: this.checked });
-  if (!this.checked) {
-    chrome.runtime.sendMessage({ type: 'clearChime' });
+// Standalone 5-minute timer (separate from Pomodoro mode)
+const fiveMinDisplay = document.getElementById('fiveMinDisplay');
+const fiveMinBtn = document.getElementById('fiveMinBtn');
+let fiveMinInterval = null;
+const FIVE_MIN_MS = 5 * 60 * 1000;
+
+chrome.storage.local.get(['fiveMinEndTime'], (data) => {
+  if (data.fiveMinEndTime) {
+    const remaining = data.fiveMinEndTime - Date.now();
+    if (remaining > 0) {
+      startFiveMinDisplay(data.fiveMinEndTime);
+    } else {
+      chrome.storage.local.remove('fiveMinEndTime');
+    }
   }
 });
+
+fiveMinBtn.addEventListener('click', () => {
+  chrome.storage.local.get(['fiveMinEndTime'], (data) => {
+    if (data.fiveMinEndTime && data.fiveMinEndTime > Date.now()) {
+      // Stop
+      clearInterval(fiveMinInterval);
+      chrome.storage.local.remove('fiveMinEndTime');
+      chrome.runtime.sendMessage({ type: 'clearFiveMin' });
+      fiveMinDisplay.textContent = '5:00';
+      fiveMinDisplay.style.color = '#555';
+      fiveMinBtn.textContent = '5 Min Timer';
+      fiveMinBtn.style.background = '#e74c3c';
+    } else {
+      // Start
+      const endTime = Date.now() + FIVE_MIN_MS;
+      chrome.storage.local.set({ fiveMinEndTime: endTime });
+      chrome.runtime.sendMessage({ type: 'scheduleFiveMin', delayMinutes: 5 });
+      startFiveMinDisplay(endTime);
+    }
+  });
+});
+
+function startFiveMinDisplay(endTime) {
+  fiveMinDisplay.style.color = '#e74c3c';
+  fiveMinBtn.textContent = 'Stop';
+  fiveMinBtn.style.background = '#7f8c8d';
+  if (fiveMinInterval) clearInterval(fiveMinInterval);
+  function update() {
+    const remaining = endTime - Date.now();
+    if (remaining <= 0) {
+      clearInterval(fiveMinInterval);
+      fiveMinDisplay.textContent = '0:00';
+      chrome.storage.local.remove('fiveMinEndTime');
+      setTimeout(() => {
+        fiveMinDisplay.textContent = '5:00';
+        fiveMinDisplay.style.color = '#555';
+        fiveMinBtn.textContent = '5 Min Timer';
+        fiveMinBtn.style.background = '#e74c3c';
+      }, 2000);
+      return;
+    }
+    const totalSecs = Math.ceil(remaining / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = String(totalSecs % 60).padStart(2, '0');
+    fiveMinDisplay.textContent = `${mins}:${secs}`;
+  }
+  update();
+  fiveMinInterval = setInterval(update, 1000);
+}
 
 // Load saved state on popup open
 chrome.storage.local.get(['scriptUrl', 'lastLogTime', 'lastActivity', 'history'], (data) => {
@@ -159,14 +235,6 @@ async function logActivity(activity) {
   currentActivityEl.textContent = activity;
   startTimerFrom(logTime);
 
-  // Schedule chime alarm in background service worker
-  if (activity === 'work') {
-    chrome.runtime.sendMessage({ type: 'scheduleChime', delayMinutes: 25 });
-  } else if (activity === 'break') {
-    chrome.runtime.sendMessage({ type: 'scheduleChime', delayMinutes: 5 });
-  } else {
-    chrome.runtime.sendMessage({ type: 'clearChime' });
-  }
 
   // Add to local history
   chrome.storage.local.get(['history'], (data) => {

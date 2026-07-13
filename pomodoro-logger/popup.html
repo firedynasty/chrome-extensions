@@ -202,21 +202,20 @@
   <div id="timer">00:00:00</div>
   <div id="currentActivity">No activity yet</div>
   <div id="countdownRow">
-    <div id="countdownDisplay" class="idle">5:00</div>
-    <button id="timerBtn">5 Min Timer</button>
+    <span id="pomPhaseLabel" style="font-size: 11px; font-weight: 600; color: #555; min-width: 38px;">WORK</span>
+    <div id="countdownDisplay" class="idle">25:00</div>
+    <button id="timerBtn">Pomodoro</button>
+  </div>
+  <div id="fiveMinRow" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+    <div id="fiveMinDisplay" class="idle" style="font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #555; letter-spacing: 2px; flex: 1; text-align: center;">5:00</div>
+    <button id="fiveMinBtn" style="padding: 8px 14px; border: none; border-radius: 6px; background: #e74c3c; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">5 Min Timer</button>
   </div>
   <div style="margin-bottom: 10px;">
     <code id="caffCmd" style="display: block; background: #16213e; padding: 6px 8px; border-radius: 4px; font-size: 11px; color: #3ea6ff; cursor: pointer; user-select: all;">caffeinate -d -t 700</code>
   </div>
   <div class="btn-row">
-    <button id="workBtn">Work</button>
-    <button id="breakBtn">Break</button>
-  </div>
-  <div class="beats-row">
-    <label class="beats-label">
-      <input type="checkbox" id="beatsToggle" checked>
-      🔔 Chime alert (work 25m / break 5m)
-    </label>
+    <button id="workBtn">+ Work</button>
+    <button id="breakBtn">+ Break</button>
   </div>
   <button id="customBtn">Custom</button>
   <button id="sheetsBtn" style="width: 100%; background: #0f9d58; margin-bottom: 6px;">Open Google Sheets</button>

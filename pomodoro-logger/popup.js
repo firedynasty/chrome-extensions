@@ -1,3 +1,7 @@
+document.getElementById('sheetsBtn').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'https://docs.google.com/spreadsheets/d/1PxtKGyT64bMIj2dJ428UvHlXENUF6mgv65YalkscJn0/edit?gid=0#gid=0' });
+});
+
 const workBtn = document.getElementById('workBtn');
 const breakBtn = document.getElementById('breakBtn');
 const customBtn = document.getElementById('customBtn');
@@ -10,49 +14,84 @@ const status = document.getElementById('status');
 const historyEl = document.getElementById('history');
 
 let timerInterval = null;
-let currentActivityType = null; // 'work' | 'break' | null
-let beatsAlertFired = false;
-let beatsAlertEnabled = true;
+let countdownInterval = null;
 
-document.getElementById('beatsToggle').addEventListener('change', function() {
-  beatsAlertEnabled = this.checked;
+// 5-minute countdown timer
+const countdownDisplay = document.getElementById('countdownDisplay');
+const timerBtn = document.getElementById('timerBtn');
+const COUNTDOWN_MS = 5 * 60 * 1000;
+
+chrome.storage.local.get(['countdownEndTime'], (data) => {
+  if (data.countdownEndTime) {
+    const remaining = data.countdownEndTime - Date.now();
+    if (remaining > 0) {
+      startCountdownDisplay(data.countdownEndTime);
+    } else {
+      chrome.storage.local.remove('countdownEndTime');
+    }
+  }
 });
 
-// Chime sound ported from vercel_youtube 30s timer (playAdvanceChime)
-function playChime() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = ctx.currentTime;
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.value = 523; // C5
-    gain1.gain.setValueAtTime(0.15, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.15);
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.value = 659; // E5
-    gain2.gain.setValueAtTime(0.15, now + 0.1);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(now + 0.1);
-    osc2.stop(now + 0.25);
-    setTimeout(() => ctx.close(), 500);
-  } catch(e) {}
+timerBtn.addEventListener('click', () => {
+  chrome.storage.local.get(['countdownEndTime'], (data) => {
+    if (data.countdownEndTime && data.countdownEndTime > Date.now()) {
+      // Stop the timer
+      clearInterval(countdownInterval);
+      chrome.storage.local.remove('countdownEndTime');
+      chrome.runtime.sendMessage({ type: 'clearCountdown' });
+      countdownDisplay.textContent = '5:00';
+      countdownDisplay.classList.add('idle');
+      timerBtn.textContent = '5 Min Timer';
+      timerBtn.classList.remove('running');
+    } else {
+      // Start the timer
+      const endTime = Date.now() + COUNTDOWN_MS;
+      chrome.storage.local.set({ countdownEndTime: endTime });
+      chrome.runtime.sendMessage({ type: 'scheduleCountdown', delayMinutes: 5 });
+      startCountdownDisplay(endTime);
+    }
+  });
+});
+
+function startCountdownDisplay(endTime) {
+  countdownDisplay.classList.remove('idle');
+  timerBtn.textContent = 'Stop';
+  timerBtn.classList.add('running');
+  if (countdownInterval) clearInterval(countdownInterval);
+  function update() {
+    const remaining = endTime - Date.now();
+    if (remaining <= 0) {
+      clearInterval(countdownInterval);
+      countdownDisplay.textContent = '0:00';
+      chrome.storage.local.remove('countdownEndTime');
+      setTimeout(() => {
+        countdownDisplay.textContent = '5:00';
+        countdownDisplay.classList.add('idle');
+        timerBtn.textContent = '5 Min Timer';
+        timerBtn.classList.remove('running');
+      }, 2000);
+      return;
+    }
+    const totalSecs = Math.ceil(remaining / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = String(totalSecs % 60).padStart(2, '0');
+    countdownDisplay.textContent = `${mins}:${secs}`;
+  }
+  update();
+  countdownInterval = setInterval(update, 1000);
 }
 
-function playChimeAlert() {
-  if (!beatsAlertEnabled) return;
-  for (let i = 0; i < 8; i++) {
-    setTimeout(playChime, i * 400);
+// Load and sync beatsAlertEnabled toggle
+const beatsToggle = document.getElementById('beatsToggle');
+chrome.storage.local.get(['beatsAlertEnabled'], (data) => {
+  if (data.beatsAlertEnabled === false) beatsToggle.checked = false;
+});
+beatsToggle.addEventListener('change', function() {
+  chrome.storage.local.set({ beatsAlertEnabled: this.checked });
+  if (!this.checked) {
+    chrome.runtime.sendMessage({ type: 'clearChime' });
   }
-}
+});
 
 // Load saved state on popup open
 chrome.storage.local.get(['scriptUrl', 'lastLogTime', 'lastActivity', 'history'], (data) => {
@@ -119,6 +158,15 @@ async function logActivity(activity) {
   const logTime = now.getTime();
   currentActivityEl.textContent = activity;
   startTimerFrom(logTime);
+
+  // Schedule chime alarm in background service worker
+  if (activity === 'work') {
+    chrome.runtime.sendMessage({ type: 'scheduleChime', delayMinutes: 25 });
+  } else if (activity === 'break') {
+    chrome.runtime.sendMessage({ type: 'scheduleChime', delayMinutes: 5 });
+  } else {
+    chrome.runtime.sendMessage({ type: 'clearChime' });
+  }
 
   // Add to local history
   chrome.storage.local.get(['history'], (data) => {

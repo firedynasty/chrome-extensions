@@ -18,8 +18,8 @@ Audio visualizer overlay that captures tab audio via `getDisplayMedia` and rende
 ### dark-mode-toggle
 Per-page dark mode using CSS `filter: invert(1) hue-rotate(180deg)` with brightness/contrast sliders. Images/videos/iframes are re-inverted to look normal.
 
-### modal-to-localstorage
-Side panel overlay to manage YouTube video entries. Reads/writes the same `pmEntries` localStorage key (`{ videoId, title, url }` format) as the YouTube Viewer's Toggle modal. Supports inline title editing, copy, delete, clipboard paste, and `URL(title)` / `URL, title` input parsing.
+### modal-to-localstorage (YouTube Links)
+Side panel overlay to manage YouTube video links. Reads/writes the same `pmEntries` localStorage key (`{ videoId, title, url }` format) as the YouTube Viewer's Toggle modal. Supports inline title editing, copy, delete, clipboard paste, and `URL(title)` / `URL, title` input parsing.
 
 ## Conventions
 

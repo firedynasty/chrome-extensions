@@ -3,7 +3,10 @@
   "name": "Pomodoro Logger",
   "version": "1.0",
   "description": "Log work/break timestamps to Google Sheets",
-  "permissions": ["storage"],
+  "permissions": ["storage", "alarms", "offscreen"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "icons": {
     "48": "icon48.png",
     "128": "icon128.png"

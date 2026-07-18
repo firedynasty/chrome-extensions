@@ -225,11 +225,11 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === '\\') {
     metStartStopBtn.click();
   } else if (e.key === '=') {
-    metBpmSlider.value = Math.min(240, parseInt(metBpmSlider.value) + 1);
+    metBpmSlider.value = Math.min(240, parseInt(metBpmSlider.value) + 2);
     metBpmLabel.textContent = metBpmSlider.value;
     send({ type: 'metBpm', value: parseInt(metBpmSlider.value) });
   } else if (e.key === '-') {
-    metBpmSlider.value = Math.max(40, parseInt(metBpmSlider.value) - 1);
+    metBpmSlider.value = Math.max(40, parseInt(metBpmSlider.value) - 2);
     metBpmLabel.textContent = metBpmSlider.value;
     send({ type: 'metBpm', value: parseInt(metBpmSlider.value) });
   }

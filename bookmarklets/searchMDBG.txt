@@ -1,0 +1,1 @@
+javascript:void(function(){var t=prompt('Paste Chinese text to search MDBG:');if(t){window.open('https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb='+encodeURIComponent(t.trim()));}})();

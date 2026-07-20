@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "YT Timestamp Logger",
+  "version": "1.1",
+  "description": "Log YouTube video timestamps with notes, then save as .txt",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

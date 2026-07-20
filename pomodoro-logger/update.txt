@@ -1,0 +1,27 @@
+Pomodoro Logger Updates
+=======================
+
+1. Google Sheets Button
+   - Added green "Open Google Sheets" button to popup
+   - Opens the spreadsheet in a new tab when clicked
+
+2. Chime Alert Fix — Background Service Worker
+   - Problem: Chime alert only worked while the popup was open and focused.
+     Chrome suspends popup JS when it's not visible, so the timer/chime never fired.
+   - Solution: Moved chime scheduling to a background service worker using chrome.alarms.
+
+   New files:
+   - background.js: Service worker that listens for chrome.alarms. When the alarm fires,
+     it creates an offscreen document to play the chime sound.
+   - offscreen.html + offscreen.js: Headless page that plays the chime using AudioContext.
+     Service workers can't use AudioContext directly, so the offscreen document handles audio.
+
+   Updated files:
+   - manifest.json: Added "alarms" and "offscreen" permissions, registered background.js
+     as the service worker.
+   - popup.js: Removed chime/AudioContext code from the popup. Now sends a message to the
+     background worker to schedule a chrome.alarms alarm (25 min for work, 5 min for break).
+     Chime toggle state is persisted to chrome.storage.local so the background worker can
+     check it independently of the popup.
+
+   Result: Chime fires reliably even when the popup is closed or Chrome is in the background.

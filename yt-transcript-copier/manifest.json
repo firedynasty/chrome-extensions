@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "YT Transcript Copier",
+  "version": "1.0",
+  "description": "Extract and copy YouTube transcript to clipboard with one tap",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

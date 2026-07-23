@@ -17,6 +17,12 @@ const metBpmLabel = document.getElementById('metBpmLabel');
 const metVolSlider = document.getElementById('metVolSlider');
 const metStartStopBtn = document.getElementById('metStartStopBtn');
 const metTapBtn = document.getElementById('metTapBtn');
+const rateLabel = document.getElementById('rateLabel');
+const rateDownBtn = document.getElementById('rateDown');
+const rateUpBtn = document.getElementById('rateUp');
+
+const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+let currentRate = 1;
 
 let lastIsPlaying = false;
 
@@ -62,6 +68,11 @@ function applyState(state) {
   metStartStopBtn.style.color = state.metIsPlaying ? '#1a1a2e' : '#fff';
 
   volumeSlider.value = state.volume;
+
+  if (state.playbackRate !== undefined) {
+    currentRate = state.playbackRate;
+    rateLabel.textContent = state.playbackRate + 'x';
+  }
 
   if (state.duration) {
     const pct = (state.currentTime / state.duration) * 100;
@@ -230,6 +241,18 @@ function adjustBpm(delta) {
   send({ type: 'metBpm', value: parseInt(metBpmSlider.value) });
 }
 
+function stepRate(delta) {
+  let i = RATES.indexOf(currentRate);
+  if (i === -1) i = RATES.indexOf(1);
+  i = Math.min(RATES.length - 1, Math.max(0, i + delta));
+  currentRate = RATES[i];
+  rateLabel.textContent = currentRate + 'x';
+  send({ type: 'rate', value: currentRate });
+}
+
+rateDownBtn.addEventListener('click', () => stepRate(-1));
+rateUpBtn.addEventListener('click', () => stepRate(1));
+
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
     // Let selects keep their default space behavior (open dropdown)
@@ -250,6 +273,10 @@ document.addEventListener('keydown', (e) => {
     adjustBpm(-2);
   } else if (e.key === 'p') {
     adjustBpm(2);
+  } else if (e.key === ',') {
+    stepRate(-1);
+  } else if (e.key === '.') {
+    stepRate(1);
   }
 });
 

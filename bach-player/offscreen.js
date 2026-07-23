@@ -11,6 +11,7 @@ let isPlaying = false;
 let shuffleOrder = [];
 let shufflePos = -1;
 let shuffleMode = false;
+let playbackRate = 1;
 
 audio.volume = 0.8;
 
@@ -115,6 +116,7 @@ function loadAndPlay(index) {
   if (needsNewSrc) {
     audio.src = track.url;
   }
+  audio.playbackRate = playbackRate;
   audio.currentTime = track.startTime || 0;
   audio.play().then(() => {
     isPlaying = true;
@@ -188,6 +190,7 @@ function getState(status) {
     currentIndex,
     isPlaying,
     shuffleMode,
+    playbackRate,
     volume: Math.round(audio.volume * 100),
     currentTime: audio.currentTime || 0,
     duration: audio.duration || 0,
@@ -337,6 +340,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   } else if (msg.type === 'volume') {
     audio.volume = msg.value / 100;
     setNoiseVolume(audio.volume);
+    broadcastState();
+  } else if (msg.type === 'rate') {
+    playbackRate = msg.value;
+    audio.playbackRate = playbackRate;
+    audio.defaultPlaybackRate = playbackRate;
     broadcastState();
   } else if (msg.type === 'seek') {
     if (audio.duration) {

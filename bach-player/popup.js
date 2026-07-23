@@ -57,7 +57,7 @@ function applyState(state) {
   if (state.metVolume !== undefined) {
     metVolSlider.value = state.metVolume;
   }
-  metStartStopBtn.innerHTML = state.metIsPlaying ? '&#9646;&#9646; Stop (\\)' : '&#9654; Start (\\)';
+  metStartStopBtn.innerHTML = state.metIsPlaying ? '&#9646;&#9646; Stop (0)' : '&#9654; Start (0)';
   metStartStopBtn.style.background = state.metIsPlaying ? '#c9a84c' : '#2c3e50';
   metStartStopBtn.style.color = state.metIsPlaying ? '#1a1a2e' : '#fff';
 
@@ -217,6 +217,19 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
+function adjustVolume(delta) {
+  volumeSlider.value = Math.min(100, Math.max(0, parseInt(volumeSlider.value) + delta));
+  send({ type: 'volume', value: parseInt(volumeSlider.value) });
+  metVolSlider.value = Math.min(100, Math.max(0, parseInt(metVolSlider.value) + delta));
+  send({ type: 'metVolume', value: parseInt(metVolSlider.value) });
+}
+
+function adjustBpm(delta) {
+  metBpmSlider.value = Math.min(240, Math.max(40, parseInt(metBpmSlider.value) + delta));
+  metBpmLabel.textContent = metBpmSlider.value;
+  send({ type: 'metBpm', value: parseInt(metBpmSlider.value) });
+}
+
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
     // Let selects keep their default space behavior (open dropdown)
@@ -227,16 +240,16 @@ document.addEventListener('keydown', (e) => {
     document.getElementById('metTempoPrev').click();
   } else if (e.key === ']') {
     document.getElementById('metTempoNext').click();
-  } else if (e.key === '\\') {
+  } else if (e.key === '0') {
     metStartStopBtn.click();
-  } else if (e.key === '=') {
-    metBpmSlider.value = Math.min(240, parseInt(metBpmSlider.value) + 2);
-    metBpmLabel.textContent = metBpmSlider.value;
-    send({ type: 'metBpm', value: parseInt(metBpmSlider.value) });
-  } else if (e.key === '-') {
-    metBpmSlider.value = Math.max(40, parseInt(metBpmSlider.value) - 2);
-    metBpmLabel.textContent = metBpmSlider.value;
-    send({ type: 'metBpm', value: parseInt(metBpmSlider.value) });
+  } else if (e.key === '=' || e.key === '+') {
+    adjustVolume(5);
+  } else if (e.key === '-' || e.key === '_') {
+    adjustVolume(-5);
+  } else if (e.key === 'o') {
+    adjustBpm(-2);
+  } else if (e.key === 'p') {
+    adjustBpm(2);
   }
 });
 

@@ -313,8 +313,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'play') {
     if (currentIndex === -1 && tracks.length > 0) {
-      shuffleMode = true;
-      generateShuffleOrder();
       nextTrack();
     } else {
       audio.play();

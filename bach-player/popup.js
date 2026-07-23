@@ -218,7 +218,12 @@ chrome.runtime.onMessage.addListener((msg) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === '[') {
+  if (e.code === 'Space') {
+    // Let selects keep their default space behavior (open dropdown)
+    if (e.target.tagName === 'SELECT') return;
+    e.preventDefault();
+    playBtn.click();
+  } else if (e.key === '[') {
     document.getElementById('metTempoPrev').click();
   } else if (e.key === ']') {
     document.getElementById('metTempoNext').click();

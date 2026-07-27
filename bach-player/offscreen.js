@@ -61,6 +61,7 @@ fetch(chrome.runtime.getURL('playlists.json'))
   });
 
 function loadGenre(genre) {
+  if (t3Timeout) cancel3minTimer();
   currentGenre = genre;
   currentEntries = playlists[genre] || [];
   currentAlbumIndex = -1;
@@ -72,6 +73,7 @@ function loadGenre(genre) {
 }
 
 function loadAlbum(index) {
+  if (t3Timeout) cancel3minTimer();
   audio.pause();
   audio.src = '';
   isPlaying = false;
@@ -191,12 +193,17 @@ function getState(status) {
     isPlaying,
     shuffleMode,
     playbackRate,
-    volume: Math.round(audio.volume * 100),
+    volume: Math.round((t3FadeVol !== null ? t3FadeVol : audio.volume) * 100),
     currentTime: audio.currentTime || 0,
     duration: audio.duration || 0,
     trackTitle: currentIndex >= 0 && tracks[currentIndex] ? tracks[currentIndex].title : null,
     tracks: tracks.map(t => t.title),
     whiteNoise: whiteNoiseActive,
+    timer3min: {
+      active: t3Timeout !== null,
+      currentLoop: t3Timeout ? T3_TOTAL_LOOPS - t3LoopsRemaining + 1 : 0,
+      totalLoops: T3_TOTAL_LOOPS
+    },
     metIsPlaying,
     metBpm,
     metVolume: Math.round(metVolume * 100),
@@ -235,7 +242,7 @@ function ensureMetAudio() {
   metMaster.connect(metCtx.destination);
 }
 
-function playClick(time, accent) {
+function playClick(time, accent, beatIdx) {
   const ctx = metCtx;
   const osc = ctx.createOscillator();
   osc.type = 'triangle';
@@ -248,12 +255,17 @@ function playClick(time, accent) {
   osc.connect(g).connect(metMaster);
   osc.start(time);
   osc.stop(time + 0.1);
+  // Tell the popup to flash the matching beat light in sync with the audio
+  if (beatIdx !== undefined) {
+    const delay = Math.max(0, (time - ctx.currentTime) * 1000);
+    chrome.runtime.sendMessage({ type: 'metBeat', beatIdx, accent, delay }).catch(() => {});
+  }
 }
 
 function metScheduler() {
   const ctx = metCtx;
   while (metNextNoteTime < ctx.currentTime + 0.1) {
-    playClick(metNextNoteTime, metPattern[metBeatIdx]);
+    playClick(metNextNoteTime, metPattern[metBeatIdx], metBeatIdx);
     metNextNoteTime += 60.0 / metBpm;
     metBeatIdx = (metBeatIdx + 1) % metPattern.length;
   }
@@ -277,6 +289,129 @@ function metStop() {
 }
 
 let metTaps = [];
+
+// ---- 3-minute repeat timer (ported from vercel_youtube ⏱️ 3m button) ----
+// Plays 3 minutes from the current position, fades out, rewinds, chimes,
+// and repeats 8 times (3m x 8 = 24 minutes). Click again to cancel.
+const T3_DURATION_MS = 180000;
+const T3_TOTAL_LOOPS = 8;
+const T3_FADE_MS = 2000;
+let t3Timeout = null;
+let t3LoopsRemaining = 0;
+let t3StartTime = 0;
+let t3TrackUrl = null;
+let t3FadeVol = null;   // volume to restore after a fade (null = not fading)
+let t3Generation = 0;   // bumped on cancel so in-flight async fades abort
+
+function toggle3minTimer() {
+  if (t3Timeout) {
+    cancel3minTimer('3m timer cancelled');
+  } else {
+    start3minTimer();
+  }
+}
+
+function start3minTimer() {
+  if (tracks.length === 0) return;
+  if (currentIndex === -1) {
+    nextTrack();
+  } else if (audio.paused) {
+    audio.play().then(() => { isPlaying = true; }).catch(() => {});
+  }
+  t3TrackUrl = tracks[currentIndex].url;
+  t3StartTime = audio.currentTime || (tracks[currentIndex].startTime || 0);
+  t3LoopsRemaining = T3_TOTAL_LOOPS;
+  run3minLoop();
+}
+
+function run3minLoop() {
+  const currentLoop = T3_TOTAL_LOOPS - t3LoopsRemaining + 1;
+  broadcastState(`3m repeat: loop ${currentLoop}/${T3_TOTAL_LOOPS}`);
+
+  t3Timeout = setTimeout(async () => {
+    const gen = t3Generation;
+    t3FadeVol = audio.volume;
+    await fadeAudioTo(0, T3_FADE_MS, gen);
+    if (gen !== t3Generation) return;  // cancelled during fade
+    t3LoopsRemaining--;
+
+    await rewindTo3minStart(gen);
+    if (gen !== t3Generation) return;
+
+    if (t3LoopsRemaining > 0) {
+      audio.play().then(() => { isPlaying = true; }).catch(() => {});
+      await fadeAudioTo(t3FadeVol, 1000, gen);
+      if (gen !== t3Generation) return;
+      t3FadeVol = null;
+      run3minLoop();
+    } else {
+      // All loops complete — pause at the loop start, restore volume
+      audio.pause();
+      isPlaying = false;
+      audio.volume = t3FadeVol;
+      t3FadeVol = null;
+      t3Timeout = null;
+      broadcastState(`3m repeat complete (${T3_TOTAL_LOOPS}/${T3_TOTAL_LOOPS})`);
+    }
+  }, T3_DURATION_MS - T3_FADE_MS);
+}
+
+function cancel3minTimer(statusMsg) {
+  t3Generation++;
+  if (t3Timeout) {
+    clearTimeout(t3Timeout);
+    t3Timeout = null;
+  }
+  t3LoopsRemaining = 0;
+  if (t3FadeVol !== null) {
+    audio.volume = t3FadeVol;
+    t3FadeVol = null;
+  }
+  broadcastState(statusMsg);
+}
+
+async function rewindTo3minStart(gen) {
+  // Restore chapter highlight for timestamp-based albums
+  let idx = -1;
+  for (let i = 0; i < tracks.length; i++) {
+    if (tracks[i].url === t3TrackUrl && (tracks[i].startTime || 0) <= t3StartTime) idx = i;
+  }
+  if (idx >= 0) currentIndex = idx;
+
+  if (audio.src !== t3TrackUrl) {
+    // Playback drifted into a different file — reload the timer's track
+    audio.src = t3TrackUrl;
+    audio.playbackRate = playbackRate;
+    await Promise.race([
+      new Promise(r => audio.addEventListener('loadedmetadata', r, { once: true })),
+      new Promise(r => setTimeout(r, 5000))
+    ]);
+    if (gen !== t3Generation) return;
+  }
+  audio.currentTime = t3StartTime;
+  broadcastState();
+}
+
+function fadeAudioTo(target, durationMs, gen) {
+  return new Promise(resolve => {
+    const startVol = audio.volume;
+    const steps = 20;
+    let i = 0;
+    const iv = setInterval(() => {
+      if (gen !== undefined && gen !== t3Generation) {
+        clearInterval(iv);
+        resolve();
+        return;
+      }
+      i++;
+      audio.volume = Math.min(1, Math.max(0, startVol + (target - startVol) * (i / steps)));
+      if (i >= steps) {
+        clearInterval(iv);
+        resolve();
+      }
+    }, durationMs / steps);
+  });
+}
 
 async function metTapBeat() {
   ensureMetAudio();
@@ -314,6 +449,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse(getState());
     return;
   }
+  if (msg.type === 'timer3minToggle') {
+    toggle3minTimer();
+    return;
+  }
   if (msg.type === 'play') {
     if (currentIndex === -1 && tracks.length > 0) {
       nextTrack();
@@ -339,6 +478,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     broadcastState();
   } else if (msg.type === 'volume') {
     audio.volume = msg.value / 100;
+    if (t3FadeVol !== null) t3FadeVol = audio.volume;
     setNoiseVolume(audio.volume);
     broadcastState();
   } else if (msg.type === 'rate') {

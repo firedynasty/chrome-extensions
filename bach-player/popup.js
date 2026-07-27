@@ -20,6 +20,26 @@ const metTapBtn = document.getElementById('metTapBtn');
 const rateLabel = document.getElementById('rateLabel');
 const rateDownBtn = document.getElementById('rateDown');
 const rateUpBtn = document.getElementById('rateUp');
+const timer3minBtn = document.getElementById('timer3minBtn');
+const metLights = [
+  document.getElementById('metL0'),
+  document.getElementById('metL1'),
+  document.getElementById('metL2'),
+  document.getElementById('metL3'),
+];
+
+function flashMetLight(beatIdx, accent) {
+  metLights.forEach(l => l.classList.remove('on-accent', 'on-tick'));
+  const light = metLights[beatIdx];
+  if (light) {
+    light.classList.add(accent ? 'on-accent' : 'on-tick');
+    setTimeout(() => light.classList.remove('on-accent', 'on-tick'), 120);
+  }
+}
+
+function clearMetLights() {
+  metLights.forEach(l => l.classList.remove('on-accent', 'on-tick'));
+}
 
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 let currentRate = 1;
@@ -66,12 +86,21 @@ function applyState(state) {
   metStartStopBtn.innerHTML = state.metIsPlaying ? '&#9646;&#9646; Stop (0)' : '&#9654; Start (0)';
   metStartStopBtn.style.background = state.metIsPlaying ? '#c9a84c' : '#2c3e50';
   metStartStopBtn.style.color = state.metIsPlaying ? '#1a1a2e' : '#fff';
+  if (!state.metIsPlaying) clearMetLights();
 
   volumeSlider.value = state.volume;
 
   if (state.playbackRate !== undefined) {
     currentRate = state.playbackRate;
     rateLabel.textContent = state.playbackRate + 'x';
+  }
+
+  if (state.timer3min && state.timer3min.active) {
+    timer3minBtn.textContent = `⏹️ ${state.timer3min.currentLoop}/${state.timer3min.totalLoops}`;
+    timer3minBtn.style.background = 'linear-gradient(45deg, #FF5722, #E64A19)';
+  } else {
+    timer3minBtn.textContent = '⏱️ 3m';
+    timer3minBtn.style.background = 'linear-gradient(45deg,#ff9800,#f57c00)';
   }
 
   if (state.duration) {
@@ -225,6 +254,8 @@ progressBar.addEventListener('click', (e) => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'stateUpdate') {
     applyState(msg);
+  } else if (msg.type === 'metBeat') {
+    setTimeout(() => flashMetLight(msg.beatIdx, msg.accent), msg.delay);
   }
 });
 
@@ -252,6 +283,7 @@ function stepRate(delta) {
 
 rateDownBtn.addEventListener('click', () => stepRate(-1));
 rateUpBtn.addEventListener('click', () => stepRate(1));
+timer3minBtn.addEventListener('click', () => send({ type: 'timer3minToggle' }));
 
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {

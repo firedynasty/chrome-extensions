@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <style>
     body {
       width: 320px;
@@ -143,6 +144,26 @@
       background: #c9a84c;
       cursor: pointer;
     }
+    .met-lights {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .met-light {
+      flex: 1;
+      height: 14px;
+      border-radius: 5px;
+      background: rgba(238, 230, 214, 0.06);
+      border: 1px solid rgba(238, 230, 214, 0.07);
+      transition: background 0.05s, box-shadow 0.05s;
+    }
+    .met-light.on-accent {
+      background: #7fa695;
+      box-shadow: 0 0 10px rgba(127, 166, 149, 0.65);
+    }
+    .met-light.on-tick {
+      background: rgba(127, 166, 149, 0.3);
+    }
     #trackList {
       margin-top: 10px;
       max-height: 150px;
@@ -200,8 +221,15 @@
   <div class="btn-row">
     <button id="shuffleBtn" title="Shuffle">&#128256;</button>
     <button id="noiseBtn" title="White Noise">&#127754;</button>
+    <button id="timer3minBtn" title="Play 3 min, rewind, repeat x8" style="background:linear-gradient(45deg,#ff9800,#f57c00);padding:6px 12px;font-size:12px">⏱️ 3m</button>
   </div>
   <div id="metronomePanel" style="border-top:1px solid #333; padding-top:8px; margin-bottom:8px;">
+    <div class="met-lights" id="metLights">
+      <div class="met-light" id="metL0"></div>
+      <div class="met-light" id="metL1"></div>
+      <div class="met-light" id="metL2"></div>
+      <div class="met-light" id="metL3"></div>
+    </div>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
       <span style="font-size:11px; color:#81C784; font-weight:600;">BPM (o,p)</span>
       <input type="range" id="metBpmSlider" min="40" max="240" value="92" style="flex:1; height:4px; -webkit-appearance:none; background:#16213e; border-radius:2px; outline:none;">

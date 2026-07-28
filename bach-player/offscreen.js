@@ -88,11 +88,12 @@ function loadAlbum(index) {
     tracks = timestampTracks.map(t => ({
       title: t.title,
       url: entry.url,
-      startTime: t.seconds
+      startTime: t.seconds,
+      youtubeId: entry.youtubeId || null
     }));
   } else {
     // Single track, no chapters
-    tracks = [{ title: entry.name, url: entry.url, startTime: 0 }];
+    tracks = [{ title: entry.name, url: entry.url, startTime: 0, youtubeId: entry.youtubeId || null }];
   }
 
   currentIndex = -1;
@@ -197,6 +198,7 @@ function getState(status) {
     currentTime: audio.currentTime || 0,
     duration: audio.duration || 0,
     trackTitle: currentIndex >= 0 && tracks[currentIndex] ? tracks[currentIndex].title : null,
+    youtubeId: currentIndex >= 0 && tracks[currentIndex] ? tracks[currentIndex].youtubeId || null : null,
     tracks: tracks.map(t => t.title),
     whiteNoise: whiteNoiseActive,
     timer3min: {

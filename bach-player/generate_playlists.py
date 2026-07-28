@@ -52,6 +52,36 @@ def name_from_url(url):
         return 'Untitled'
 
 
+def extract_youtube_id(url):
+    """Extract a YouTube video ID embedded at the end of a Dropbox filename.
+
+    Dropbox filenames created by youtube-dl/yt-dlp end with the 11-char
+    YouTube video ID just before the extension, e.g.:
+      Clear-Mind-...-A6dzSX62gEY.m4a  →  A6dzSX62gEY
+      Bach-...-N6sUlZa-IrU.m4a        →  N6sUlZa-IrU  (hyphen in ID)
+    """
+    try:
+        path = urlparse(url).path
+        filename = unquote(path.split('/')[-1])
+        stem = re.sub(r'\.\w{2,4}$', '', filename)
+        # Bracket-style IDs first: [VmImA0YKsJg]
+        m = re.search(r'\[([A-Za-z0-9_-]{11})\]$', stem)
+        if m:
+            return m.group(1)
+        # Dash-separated ID at end: -A6dzSX62gEY
+        m = re.search(r'[_-]([A-Za-z0-9_-]{11})$', stem)
+        if m:
+            candidate = m.group(1)
+            # Reject if any hyphen-separated segment is all-digits
+            # (e.g. "1983-Presto" looks like a year-word, not a YouTube ID)
+            if any(re.match(r'^\d+$', part) for part in candidate.split('-')):
+                return None
+            return candidate
+    except Exception:
+        pass
+    return None
+
+
 def is_timestamp_line(line):
     """Check if line starts with a timestamp like 00:00, 1:03:35, etc."""
     return bool(re.match(r'^\d{1,2}:\d{2}(:\d{2})?\s', line))
@@ -125,7 +155,10 @@ def parse_file(filepath):
                 continue
             if not name:
                 name = name_from_url(url)
+            youtube_id = extract_youtube_id(url)
             current_entry = {'name': name, 'url': url, 'tracks': []}
+            if youtube_id:
+                current_entry['youtubeId'] = youtube_id
             entries.append(current_entry)
 
         elif is_timestamp_line(line) and current_entry is not None:

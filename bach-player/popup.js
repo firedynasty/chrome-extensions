@@ -21,6 +21,8 @@ const rateLabel = document.getElementById('rateLabel');
 const rateDownBtn = document.getElementById('rateDown');
 const rateUpBtn = document.getElementById('rateUp');
 const timer3minBtn = document.getElementById('timer3minBtn');
+const ytLink = document.getElementById('ytLink');
+const ytAnchor = document.getElementById('ytAnchor');
 const metLights = [
   document.getElementById('metL0'),
   document.getElementById('metL1'),
@@ -58,6 +60,12 @@ function applyState(state) {
 
   lastIsPlaying = state.isPlaying;
   trackTitle.textContent = state.trackTitle || 'Click play to start';
+  if (state.youtubeId) {
+    ytAnchor.href = `https://www.youtube.com/watch?v=${state.youtubeId}`;
+    ytLink.style.display = 'block';
+  } else {
+    ytLink.style.display = 'none';
+  }
   playBtn.innerHTML = state.isPlaying ? '&#9646;&#9646;' : '&#9654;';
 
   if (state.shuffleMode) {

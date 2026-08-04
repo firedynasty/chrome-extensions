@@ -48,21 +48,28 @@
     });
   }
 
+  function isStamp(e) { return !e.type || e.type === 'stamp'; }
+
   function buildSaveTxt(notes) {
-    let out = entries.map((e) => e.ts).join(',');
+    const stamps = entries.filter(isStamp);
+    let out = stamps.map((e) => e.ts).join(',');
     out += '\n\n';
     if (videoUrl) out += videoUrl + '\n';
     if (videoTitle) out += videoTitle + '\n';
-    const noted = entries.filter((e) => e.note);
-    const free  = notes.trim();
-    if (noted.length) {
-      out += '\n';
-      noted.forEach((e) => { out += `[${e.ts}] ${e.note}\n`; });
-    }
-    if (free) {
-      if (noted.length) out += '\n';
-      out += free + '\n';
-    }
+    out += '\n';
+    let idx = 0;
+    entries.forEach((e) => {
+      if (isStamp(e)) {
+        idx++;
+        out += `[${idx}]`;
+        if (e.note) out += ` ${e.note}`;
+        out += '\n';
+      } else {
+        out += `[no] ${e.text}\n`;
+      }
+    });
+    const free = notes.trim();
+    if (free) out += '\n' + free + '\n';
     return out;
   }
 
@@ -70,10 +77,16 @@
     let out = (videoUrl || location.href) + '\n';
     if (videoTitle) out += videoTitle + '\n';
     out += '\n';
+    let idx = 0;
     entries.forEach((e) => {
-      out += `[${e.ts}]`;
-      if (e.note) out += ` ${e.note}`;
-      out += '\n';
+      if (isStamp(e)) {
+        idx++;
+        out += `[${idx}]`;
+        if (e.note) out += ` ${e.note}`;
+        out += '\n';
+      } else {
+        out += `[no] ${e.text}\n`;
+      }
     });
     const free = notes.trim();
     if (free) out += '\n' + free + '\n';
@@ -109,8 +122,8 @@
     bar.innerHTML = `
       <button id="yt-ts-append"
         style="padding:5px 10px;border:none;border-radius:5px;background:#8e44ad;color:#fff;
-               font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">+</button>
-      <input id="yt-ts-note" type="text" placeholder="Note (optional) — Enter to stamp"
+               font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">+ note (no stamp)</button>
+      <input id="yt-ts-note" type="text" placeholder="Note (optional) — Enter to stamp, Shift+Tab to note"
         style="flex:1;min-width:0;padding:5px 8px;border:1px solid #3ea6ff66;border-radius:5px;
                background:#0f0f23;color:#e0e0e0;font-size:13px;outline:none;">
       <button id="yt-ts-stamp"
@@ -157,9 +170,8 @@
   }
 
   function updateCount(el) {
-    el.textContent = entries.length
-      ? `${entries.length} stamp${entries.length !== 1 ? 's' : ''}`
-      : '';
+    const n = entries.filter(isStamp).length;
+    el.textContent = n ? `${n} stamp${n !== 1 ? 's' : ''}` : '';
   }
 
   // ── wiring ────────────────────────────────────────────────────────────────
@@ -179,8 +191,8 @@
     loadState((savedNotes) => {
       notesValue = savedNotes;
       updateCount(countEl);
-      if (entries.length)
-        setStatus(statusEl, `${entries.length} stamp${entries.length !== 1 ? 's' : ''} restored`);
+      const n = entries.filter(isStamp).length;
+      if (n) setStatus(statusEl, `${n} stamp${n !== 1 ? 's' : ''} restored`);
     });
 
     function togglePlayPause() {
@@ -203,7 +215,7 @@
       videoUrl    = info.url;
       videoTitle  = info.title;
       const note  = noteInput.value.trim();
-      entries.push({ ts, note });
+      entries.push({ type: 'stamp', ts, note });
       noteInput.value = '';
       noteInput.focus();
       updateCount(countEl);
@@ -238,7 +250,7 @@
     appendBtn.addEventListener('click', () => {
       const text = noteInput.value.trim();
       if (!text) { setStatus(statusEl, 'Nothing to append', true); return; }
-      notesValue = notesValue ? notesValue + '\n' + text : text;
+      entries.push({ type: 'append', text });
       noteInput.value = '';
       noteInput.focus();
       saveState(notesValue);

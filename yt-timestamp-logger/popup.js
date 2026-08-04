@@ -49,8 +49,9 @@ chrome.storage.local.get(['tsEntries', 'tsVideoUrl', 'tsVideoTitle', 'tsNotes'],
   if (data.tsVideoTitle) videoTitle = data.tsVideoTitle;
   if (data.tsNotes) notesArea.value = data.tsNotes;
   renderEntries();
-  if (entries.length) {
-    status.textContent = `${entries.length} stamp${entries.length > 1 ? 's' : ''} restored`;
+  const stampCount = entries.filter(e => !e.type || e.type === 'stamp').length;
+  if (stampCount) {
+    status.textContent = `${stampCount} stamp${stampCount > 1 ? 's' : ''} restored`;
     status.className = 'success';
   }
 });
@@ -114,7 +115,7 @@ stampBtn.addEventListener('click', async () => {
   videoUrl = info.url;
   videoTitle = info.title;
   const note = noteInput.value.trim();
-  entries.push({ ts: info.ts, note });
+  entries.push({ type: 'stamp', ts: info.ts, note });
   noteInput.value = '';
   noteInput.focus();
   renderEntries();
@@ -135,10 +136,17 @@ clearBtn.addEventListener('click', () => {
 });
 
 function renderEntries() {
-  countDiv.textContent = entries.length ? `${entries.length} timestamp${entries.length > 1 ? 's' : ''}` : '';
+  const stampCount = entries.filter(e => !e.type || e.type === 'stamp').length;
+  countDiv.textContent = stampCount ? `${stampCount} timestamp${stampCount > 1 ? 's' : ''}` : '';
+  let idx = 0;
   entriesDiv.innerHTML = entries.map(e => {
-    const noteHtml = e.note ? `<span class="entry-note">— ${escHtml(e.note)}</span>` : '';
-    return `<div class="entry"><span class="entry-ts">[${escHtml(e.ts)}]</span>${noteHtml}</div>`;
+    if (!e.type || e.type === 'stamp') {
+      idx++;
+      const noteHtml = e.note ? `<span class="entry-note">— ${escHtml(e.note)}</span>` : '';
+      return `<div class="entry"><span class="entry-ts">[${idx}]</span>${noteHtml}</div>`;
+    } else {
+      return `<div class="entry"><span class="entry-ts" style="color:#8e44ad">[no]</span><span class="entry-note">— ${escHtml(e.text)}</span></div>`;
+    }
   }).join('');
   entriesDiv.scrollTop = entriesDiv.scrollHeight;
 }
@@ -147,33 +155,45 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function isStamp(e) { return !e.type || e.type === 'stamp'; }
+
 function buildSaveTxt() {
-  let out = entries.map(e => e.ts).join(',');
+  const stamps = entries.filter(isStamp);
+  let out = stamps.map(e => e.ts).join(',');
   out += '\n\n';
   if (videoUrl) out += videoUrl + '\n';
   if (videoTitle) out += videoTitle + '\n';
-  const noted = entries.filter(e => e.note);
+  out += '\n';
+  let idx = 0;
+  entries.forEach(e => {
+    if (isStamp(e)) {
+      idx++;
+      out += `[${idx}]`;
+      if (e.note) out += ` ${e.note}`;
+      out += '\n';
+    } else {
+      out += `[no] ${e.text}\n`;
+    }
+  });
   const freeNotes = notesArea.value.trim();
-  if (noted.length) {
-    out += '\n';
-    noted.forEach(e => { out += `[${e.ts}] ${e.note}\n`; });
-  }
-  if (freeNotes) {
-    if (noted.length) out += '\n';
-    out += freeNotes + '\n';
-  }
+  if (freeNotes) out += '\n' + freeNotes + '\n';
   return out;
 }
 
 function buildFullText() {
-  // Human-readable format with notes
   let out = videoUrl + '\n';
   if (videoTitle) out += videoTitle + '\n';
   out += '\n';
+  let idx = 0;
   entries.forEach(e => {
-    out += `[${e.ts}]`;
-    if (e.note) out += ` ${e.note}`;
-    out += '\n';
+    if (isStamp(e)) {
+      idx++;
+      out += `[${idx}]`;
+      if (e.note) out += ` ${e.note}`;
+      out += '\n';
+    } else {
+      out += `[no] ${e.text}\n`;
+    }
   });
   const freeNotes = notesArea.value.trim();
   if (freeNotes) out += '\n' + freeNotes + '\n';

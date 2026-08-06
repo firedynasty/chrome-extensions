@@ -91,7 +91,7 @@ function applyState(state) {
   if (state.metVolume !== undefined) {
     metVolSlider.value = state.metVolume;
   }
-  metStartStopBtn.innerHTML = state.metIsPlaying ? '&#9646;&#9646; Stop (0)' : '&#9654; Start (0)';
+  metStartStopBtn.innerHTML = state.metIsPlaying ? '&#9646;&#9646; Stop (Space)' : '&#9654; Start (Space)';
   metStartStopBtn.style.background = state.metIsPlaying ? '#c9a84c' : '#2c3e50';
   metStartStopBtn.style.color = state.metIsPlaying ? '#1a1a2e' : '#fff';
   if (!state.metIsPlaying) clearMetLights();
@@ -298,13 +298,13 @@ document.addEventListener('keydown', (e) => {
     // Let selects keep their default space behavior (open dropdown)
     if (e.target.tagName === 'SELECT') return;
     e.preventDefault();
-    playBtn.click();
+    metStartStopBtn.click();
   } else if (e.key === '[') {
     document.getElementById('metTempoPrev').click();
   } else if (e.key === ']') {
     document.getElementById('metTempoNext').click();
   } else if (e.key === '0') {
-    metStartStopBtn.click();
+    playBtn.click();
   } else if (e.key === '=' || e.key === '+') {
     adjustVolume(5);
   } else if (e.key === '-' || e.key === '_') {

@@ -1,0 +1,57 @@
+# Loop Mix — Segment Looper (Chrome Extension)
+
+Loops segments of any HTML5 video or audio on any page. Ported from the **Loop Mix** modal in the YouTube Viewer (`vercel_youtube`), which itself mimics the `Start, End, [Loops]` dialog that pipes into `mix_mp3.py`.
+
+## How It Works
+
+Click the extension icon → **🔁 Loop Mix** injects a modal into the active tab. Enter one segment per line:
+
+```
+start, end, [loops]
+```
+
+- `1:30, 1:44` — play 1:30→1:44 once
+- `2:00, 2:10, 5` — play 2:00→2:10 five times
+- `3:00, 15, 3` — end **without a colon** = duration in seconds (plays 3:00→3:15, 3×)
+
+**Generate Table ▶** parses every line into a numbered table (bad lines show their error inline). Each row's **▶** starts looping that segment and closes the modal so playback stays visible.
+
+## Features
+
+- **mix_mp3.py parsing semantics** — colon end = absolute timestamp, plain-number end = duration; loops default to 1
+- **Paste Clipboard button** — fills the textarea from the clipboard (same as the Viewer's Paste Media modal)
+- **Boundary noise** — 0.15s white-noise burst (amp 0.032, 30% fade in/out) at each loop seam, masking the seek click — same as the Viewer's Loop Mix
+- **Floating chip** while a loop runs (`🔁 1:30→1:44 · loop 2/5`) with a ✕ to cancel — cancel stops rewinding but leaves playback running
+- After the final loop, the loop engine stops and **playback keeps going** — no pause
+- **Escape** closes the modal, **Ctrl/Cmd+Enter** generates the table
+- Works on any `<video>`/`<audio>` — prefers the currently playing element, falls back to the largest one
+- No background script, no persistent permissions, no data collection
+
+## Installation
+
+1. Go to `chrome://extensions/`
+2. Enable **Developer mode** (top-right toggle)
+3. Click **Load unpacked**
+4. Select this `looper` folder
+5. Pin the extension to your toolbar
+
+## Where It Works
+
+Works on any regular webpage with HTML5 media — YouTube, Vimeo, file:// videos, localhost dev servers, etc.
+
+Does **not** work on Chrome internal pages (`chrome://` URLs) — this is a Chrome security restriction.
+
+## Files
+
+| File | Description |
+|------|-------------|
+| `manifest.json` | Manifest V3 config — `activeTab` + `scripting` permissions |
+| `popup.html` | Extension popup with the 🔁 Loop Mix button and syntax hint |
+| `popup.js` | Injects the self-contained Loop Mix modal + loop engine into the active tab |
+| `generate_icons.py` | Pillow script that regenerates the icons |
+| `icon48.png` | Toolbar icon (48x48) |
+| `icon128.png` | Store icon (128x128) |
+
+## License
+
+MIT

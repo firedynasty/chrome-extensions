@@ -7,7 +7,7 @@ This repo is a collection of Chrome extensions (Manifest V3) that repurpose func
 ## Origin
 
 Code is adapted from:
-- **vercel_youtube** (`vercel-youtubeviewer.vercel.app`) — audio visualizer overlay, paste-media Toggle modal (`pmEntries` localStorage format)
+- **vercel_youtube** (`vercel-youtubeviewer.vercel.app`) — audio visualizer overlay, paste-media Toggle modal (`pmEntries` localStorage format), Loop Mix segment looper modal (`mix_mp3.py` parsing semantics + boundary noise)
 - **js-audio-visualizer** — Nick Jones' audio visualizer (MIT, https://codepen.io/nfj525/pen/rVBaab)
 
 ## Extensions
@@ -20,6 +20,9 @@ Per-page dark mode using CSS `filter: invert(1) hue-rotate(180deg)` with brightn
 
 ### modal-to-localstorage (YouTube Links)
 Side panel overlay to manage YouTube video links. Reads/writes the same `pmEntries` localStorage key (`{ videoId, title, url }` format) as the YouTube Viewer's Toggle modal. Supports inline title editing, copy, delete, clipboard paste, and `URL(title)` / `URL, title` input parsing.
+
+### looper (Loop Mix — Segment Looper)
+Loops segments of any HTML5 video/audio on any page. Port of the YouTube Viewer's Loop Mix modal: `start, end, [loops]` lines (colon end = absolute, plain number = duration), generated table with per-row ▶, paste-from-clipboard button, white-noise burst at loop seams, floating cancel chip while a loop runs, playback continues after the final loop. Version-stamped singleton (`window.__lmx`) tears down stale injected DOM on upgrade.
 
 ## Conventions
 

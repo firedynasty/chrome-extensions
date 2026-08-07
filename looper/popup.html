@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 240px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      margin: 0;
+    }
+    h2 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      color: #fff;
+      text-align: center;
+    }
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      transition: filter 0.2s;
+      margin-bottom: 6px;
+    }
+    #openBtn {
+      background: linear-gradient(45deg, #26c6da, #0097a7);
+      font-size: 13px;
+      padding: 10px 19px;
+    }
+    #openBtn:hover {
+      filter: brightness(1.15);
+    }
+    .hint {
+      font-size: 11px;
+      color: #999;
+      line-height: 1.5;
+      margin-top: 10px;
+    }
+    .hint code {
+      color: #26c6da;
+      font-size: 10px;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 12px;
+      text-align: center;
+      min-height: 18px;
+      color: #aaa;
+    }
+    .success { color: #2ecc71 !important; }
+    .error { color: #e74c3c !important; }
+  </style>
+</head>
+<body>
+  <h2>🔁 Loop Mix</h2>
+  <button id="openBtn">🔁 Loop Mix</button>
+  <div class="hint">
+    Opens the segment looper on the current page's video/audio.<br>
+    One segment per line: <code>start, end, [loops]</code><br>
+    <code>1:30, 1:44</code> · <code>2:00, 2:10, 5</code> · <code>3:00, 15, 3</code> (plain-number end = duration)
+  </div>
+  <div id="status">Applies to current tab only</div>
+  <script src="popup.js"></script>
+</body>
+</html>

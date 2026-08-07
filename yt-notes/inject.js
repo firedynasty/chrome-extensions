@@ -4,7 +4,7 @@
 // display char is built with String.fromCharCode / String.fromCodePoint
 // so the page's charset can never mangle it.
 (function () {
-  const VERSION = 2;
+  const VERSION = 5;
   const PANEL_ID = '__ytn_panel';
 
   // Non-ASCII display chars, charset-proof
@@ -16,10 +16,6 @@
   const MEMO = String.fromCodePoint(0x1F4DD);    // 📝
 
   const SEG_SEL = 'transcript-segment-view-model, ytd-transcript-segment-renderer';
-
-  // Collected lines show as short previews in the dialog; the clipboard
-  // always carries the full text.
-  const PREVIEW_CHARS = 10;
 
   // Upgraded code? Tear down the old instance completely.
   if (window.__ytn && window.__ytn.version !== VERSION) {
@@ -41,7 +37,9 @@
   // ---- clipboard ----
 
   function bufferText() {
-    return state.buffer.length ? state.buffer.join('\n') + '\n' : '';
+    // Blank line after every entry so pastes come out as separate
+    // paragraphs even where single newlines get collapsed.
+    return state.buffer.length ? state.buffer.join('\n\n') + '\n\n' : '';
   }
 
   function copyBuffer(msg) {
@@ -64,12 +62,6 @@
     renderList();
     copyBuffer(state.buffer.length + ' line(s) ' + MDOT + ' clipboard updated');
     flashPanel();
-  }
-
-  function removeLine(i) {
-    state.buffer.splice(i, 1);
-    renderList();
-    copyBuffer(state.buffer.length + ' line(s) ' + MDOT + ' line removed');
   }
 
   // Intercept clicks on YouTube's own transcript segments (capture phase,
@@ -112,42 +104,26 @@
     countEl.textContent = String(state.buffer.length);
     if (!state.buffer.length) {
       const empty = document.createElement('div');
-      empty.style.cssText = 'padding:14px 10px; font-size:12px; color:#777; text-align:center;';
+      empty.style.cssText = 'padding:6px 4px; font-size:12px; color:#777; text-align:center; width:100%;';
       empty.textContent = 'No lines yet ' + EM + ' click transcript captions or type your own note below';
       listEl.appendChild(empty);
       return;
     }
+    // Compact chips — just [1] [2] [3] ... one per collected line
     state.buffer.forEach(function (line, i) {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex; align-items:flex-start; gap:6px; padding:6px 8px; border-bottom:1px solid #2c2c44; font-size:12.5px; line-height:1.4;';
-
-      const num = document.createElement('span');
-      num.style.cssText = 'color:#AB47BC; font-weight:700; flex:none; min-width:18px;';
-      num.textContent = (i + 1) + '.';
-
-      const txt = document.createElement('span');
-      txt.style.cssText = 'flex:1; white-space:nowrap; overflow:hidden;';
-      txt.textContent = line.length > PREVIEW_CHARS ? line.substring(0, PREVIEW_CHARS) + '...' : line;
-
-      const del = document.createElement('button');
-      del.style.cssText = 'flex:none; background:none; border:none; color:#666; cursor:pointer; font-size:11px; padding:1px 3px;';
-      del.textContent = X;
-      del.title = 'Remove this line';
-      del.addEventListener('click', function () { removeLine(i); });
-
-      row.appendChild(num);
-      row.appendChild(txt);
-      row.appendChild(del);
-      listEl.appendChild(row);
+      const chip = document.createElement('span');
+      chip.style.cssText = 'background:#2c2c44; color:#CE93D8; font-size:11px; font-weight:700; border-radius:4px; padding:2px 6px;';
+      chip.textContent = '[' + (i + 1) + ']';
+      listEl.appendChild(chip);
     });
-    // keep the newest line visible
+    // keep the newest chip visible
     listEl.scrollTop = listEl.scrollHeight;
   }
 
   function buildPanel() {
     panel = document.createElement('div');
     panel.id = PANEL_ID;
-    panel.style.cssText = 'position:fixed; top:64px; right:16px; width:340px; max-height:78vh; background:#1a1a2e; color:#e0e0e0; border:1px solid #444; border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.6); z-index:2147483646; display:flex; flex-direction:column; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; overflow:hidden;';
+    panel.style.cssText = 'position:fixed; top:0; right:0; width:340px; max-height:78vh; background:#1a1a2e; color:#e0e0e0; border:1px solid #444; border-radius:0 0 0 10px; box-shadow:0 8px 30px rgba(0,0,0,0.6); z-index:2147483646; display:flex; flex-direction:column; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; overflow:hidden;';
 
     // header
     const head = document.createElement('div');
@@ -206,9 +182,9 @@
     head.appendChild(clearBtn);
     head.appendChild(closeBtn);
 
-    // collected lines
+    // collected lines (compact chips)
     listEl = document.createElement('div');
-    listEl.style.cssText = 'flex:1; overflow-y:auto; min-height:60px; max-height:46vh;';
+    listEl.style.cssText = 'flex:1; overflow-y:auto; min-height:30px; max-height:30vh; display:flex; flex-wrap:wrap; gap:4px; align-content:flex-start; padding:6px 8px;';
 
     // typed-note input row
     const inputRow = document.createElement('div');

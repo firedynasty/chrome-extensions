@@ -9,15 +9,14 @@ Lazy note-taking for YouTube talks and lectures: click lines in YouTube's **own 
 3. A floating dialog appears (top-right) and the transcript panel opens automatically if it isn't already
 4. **Click any transcript line** → it's appended to the list (the video does **not** jump — the click is intercepted while notes mode is on)
 5. **Type your own note** into the dialog's input → Enter (or **Add**) appends it in place
-6. Paste anywhere — the clipboard always holds the full list, one line per note
+6. Paste anywhere — the clipboard always holds the full list, each note separated by a blank line so entries never paste as one inline blob
 
 ## Features
 
 - **Click-to-collect** on the native transcript — works with both YouTube transcript renderers (`transcript-segment-view-model` and `ytd-transcript-segment-renderer`)
 - **No accidental seeks** — capture-phase click interception stops YouTube's jump-to-timestamp while collecting
-- **Floating display dialog** — numbered list of everything collected, each line shown as a short 10-character preview so the dialog stays compact over the transcript (the clipboard always carries the full text), auto-scrolls to the newest line
+- **Floating display dialog** — collected lines shown as compact `[1] [2] [3]` chips so the dialog stays tiny over the transcript (the clipboard always carries the full text)
 - **Typed notes** — input box appends your own text into the same list, interleaved with transcript lines
-- **Per-line ✕** to remove a mistaken capture (clipboard re-syncs)
 - **Copy+Clear** copies the whole list then empties it — paste, then start a fresh batch; **Clear** empties without copying, **✕** turns notes mode off
 - **Auto-opens the transcript** (expands the description, clicks "Show transcript", waits for segments); falls back to a hint if the video has no transcript
 - Buffer **survives YouTube's in-app navigation** — collect across multiple videos, paste once

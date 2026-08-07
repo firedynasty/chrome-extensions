@@ -24,6 +24,9 @@ Side panel overlay to manage YouTube video links. Reads/writes the same `pmEntri
 ### looper (Loop Mix — Segment Looper)
 Loops segments of any HTML5 video/audio on any page. Port of the YouTube Viewer's Loop Mix modal: `start, end, [loops]` lines (colon end = absolute, plain number = duration), generated table with per-row ▶, paste-from-clipboard button, white-noise burst at loop seams, floating cancel chip while a loop runs, playback continues after the final loop. Version-stamped singleton (`window.__lmx`) tears down stale injected DOM on upgrade.
 
+### yt-notes (Click Transcript to Collect)
+Lazy note-taking on YouTube watch pages. No popup — the toolbar icon toggles capture mode directly via an `action.onClicked` service worker (event-driven exception to the no-background-scripts convention). Clicks on the native transcript segments are intercepted (capture phase, so the video doesn't seek) and the text is appended to a running buffer; a floating dialog displays 10-char previews of collected lines with per-row delete, a typed-note input, Copy+Clear/Clear/close buttons. Every append rewrites the clipboard with the full newline-joined list. Auto-opens the transcript panel if needed. Version-stamped singleton (`window.__ytn`).
+
 ## Conventions
 
 - All extensions use Manifest V3 with minimal permissions (`activeTab` + `scripting`)

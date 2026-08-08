@@ -21,7 +21,7 @@ start, end, [loops]
 - **mix_mp3.py parsing semantics** — colon end = absolute timestamp, plain-number end = duration; loops default to 1
 - **Paste Clipboard button** — fills the textarea from the clipboard (same as the Viewer's Paste Media modal)
 - **Boundary noise** — 0.15s white-noise burst (amp 0.032, 30% fade in/out) at each loop seam, masking the seek click — same as the Viewer's Loop Mix
-- **Floating chip** while a loop runs (`🔁 1:30→1:44 · loop 2/5`) with a ✕ to cancel — cancel stops rewinding but leaves playback running
+- **Floating chip** while a loop runs (`🔁 1:30→1:44 · loop 2/5`) with ⏸/▶ to pause/resume and ✕ to cancel — pausing suspends the loop engine too (interval cleared), resuming restarts it; pause/play from the page's own controls suspends/resumes the looper as well. Cancel stops rewinding but leaves playback running
 - After the final loop, the loop engine stops and **playback keeps going** — no pause
 - **Escape** closes the modal, **Ctrl/Cmd+Enter** generates the table
 - Works on any `<video>`/`<audio>` — prefers the currently playing element, falls back to the largest one

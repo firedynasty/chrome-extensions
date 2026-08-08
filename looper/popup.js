@@ -28,14 +28,14 @@ function loopMixInject() {
   const MODAL_ID = '__lmx_modal';
   const CHIP_ID = '__lmx_chip';
 
-  const LMX_VERSION = 3;
+  const LMX_VERSION = 4;
 
   // Re-inject with current version: module already lives in this tab — just
   // reopen the modal. Older injections (or their orphaned DOM) get torn down
   // and rebuilt so a stale/broken UI can never persist.
   if (window.__lmx && window.__lmx.version === LMX_VERSION) {
     window.__lmx.openModal();
-    return window.__lmx.state.interval ? 'Loop running ' + String.fromCharCode(0x2014) + ' modal reopened' : 'Loop Mix reopened';
+    return (window.__lmx.state.interval || window.__lmx.state.paused) ? 'Loop running ' + String.fromCharCode(0x2014) + ' modal reopened' : 'Loop Mix reopened';
   }
   if (window.__lmx) {
     try { if (window.__lmx.state && window.__lmx.state.interval) clearInterval(window.__lmx.state.interval); } catch (e) {}
@@ -54,7 +54,10 @@ function loopMixInject() {
     loopsRemaining: 0,
     totalLoops: 0,
     rows: [],
-    noiseCtx: null
+    noiseCtx: null,
+    paused: false,
+    onMediaPlay: null,
+    onMediaPause: null
   };
 
   // ---------- time helpers (parity with the YouTube Viewer) ----------
@@ -198,10 +201,12 @@ function loopMixInject() {
     }
     clearLoopInterval();
     state.media = media;
+    attachMediaListeners(media);
     state.start = startSec;
     state.end = startSec + durationSec;
     state.loopsRemaining = loops;
     state.totalLoops = loops;
+    state.paused = false;
     media.currentTime = startSec;
     const p = media.play();
     if (p && p.catch) p.catch(() => {});
@@ -215,6 +220,7 @@ function loopMixInject() {
   function tick() {
     const m = state.media;
     if (!m || !document.contains(m)) { cancelLoop(); return; }
+    updatePauseBtn();
     if (m.currentTime >= state.end - 0.03) {
       if (state.loopsRemaining > 1) {
         state.loopsRemaining--;
@@ -241,10 +247,67 @@ function loopMixInject() {
 
   // User-initiated cancel: stop rewinding, leave playback running
   function cancelLoop() {
+    detachMediaListeners();
     clearLoopInterval();
+    state.paused = false;
     hideChip();
     updateStopBtn();
     setStatus('Loop Mix cancelled');
+  }
+
+  // ---------- pause/resume (chip ⏸/▶ button) ----------
+  // Pausing suspends the loop engine itself — interval cleared — not just the
+  // media. Symmetric: ANY pause/play of the media (chip button or the page's
+  // own controls) suspends/resumes the looper via these listeners.
+  function attachMediaListeners(m) {
+    detachMediaListeners();
+    state.onMediaPlay = function() {
+      if (state.paused) {
+        state.paused = false;
+        if (!state.interval && state.loopsRemaining > 0) state.interval = setInterval(tick, 40);
+      }
+      updatePauseBtn();
+    };
+    state.onMediaPause = function() {
+      if (state.interval) {
+        clearLoopInterval();
+        state.paused = true;
+      }
+      updatePauseBtn();
+    };
+    m.addEventListener('play', state.onMediaPlay);
+    m.addEventListener('pause', state.onMediaPause);
+  }
+
+  function detachMediaListeners() {
+    if (state.media && state.onMediaPlay) state.media.removeEventListener('play', state.onMediaPlay);
+    if (state.media && state.onMediaPause) state.media.removeEventListener('pause', state.onMediaPause);
+    state.onMediaPlay = null;
+    state.onMediaPause = null;
+  }
+
+  function togglePause() {
+    const m = state.media;
+    if (!m || !document.contains(m)) return;
+    if (!state.interval && !state.paused) return; // no loop engaged
+    if (m.paused) {
+      const p = m.play();
+      if (p && p.catch) p.catch(() => {});
+    } else {
+      m.pause();
+    }
+    // The play/pause event listeners above do the state/interval work.
+  }
+
+  function updatePauseBtn() {
+    const btn = document.getElementById(CHIP_ID + '_pause');
+    if (!btn) return;
+    const paused = state.media ? state.media.paused : false;
+    const icon = paused ? String.fromCharCode(0x25B6) : String.fromCharCode(0x23F8);
+    if (btn.textContent !== icon) {
+      btn.textContent = icon;
+      btn.title = paused ? 'Resume loop' : 'Pause loop';
+    }
   }
 
   // ---------- floating chip (visible while a loop runs, modal is closed) ----------
@@ -256,16 +319,24 @@ function loopMixInject() {
       chip.style.cssText = 'position:fixed; bottom:18px; right:18px; z-index:' + Z_MAX + '; background:linear-gradient(45deg,#26C6DA,#0097A7); color:#fff; padding:8px 12px; border-radius:8px; font:700 13px -apple-system,BlinkMacSystemFont,sans-serif; box-shadow:0 4px 16px rgba(0,0,0,0.5); display:flex; align-items:center; gap:8px;';
       const label = document.createElement('span');
       label.id = CHIP_ID + '_label';
+      const pauseBtn = document.createElement('button');
+      pauseBtn.id = CHIP_ID + '_pause';
+      pauseBtn.textContent = String.fromCharCode(0x23F8);
+      pauseBtn.title = 'Pause loop';
+      pauseBtn.style.cssText = 'background:rgba(0,0,0,0.25); border:none; color:#fff; border-radius:4px; cursor:pointer; font-size:12px; font-weight:700; padding:2px 7px;';
+      pauseBtn.addEventListener('click', togglePause);
       const x = document.createElement('button');
       x.textContent = String.fromCharCode(0x2715);
       x.title = 'Cancel loop';
       x.style.cssText = 'background:rgba(0,0,0,0.25); border:none; color:#fff; border-radius:4px; cursor:pointer; font-size:12px; font-weight:700; padding:2px 7px;';
       x.addEventListener('click', cancelLoop);
       chip.appendChild(label);
+      chip.appendChild(pauseBtn);
       chip.appendChild(x);
       document.body.appendChild(chip);
     }
     chip.style.display = 'flex';
+    updatePauseBtn();
   }
 
   function updateChip() {
@@ -405,7 +476,7 @@ function loopMixInject() {
 
   function updateStopBtn() {
     const btn = document.getElementById('__lmx_stop');
-    if (btn) btn.style.display = state.interval ? '' : 'none';
+    if (btn) btn.style.display = (state.interval || state.paused) ? '' : 'none';
   }
 
   function setStatus(msg, isError) {

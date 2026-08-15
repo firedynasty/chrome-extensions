@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      width: 220px;
+      padding: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      margin: 0;
+    }
+    h2 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      color: #fff;
+      text-align: center;
+    }
+    button {
+      width: 100%;
+      padding: 9px;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    #toggleBarBtn { background: #2c3e50; }
+    #toggleBarBtn:hover { background: #34495e; }
+    #status {
+      font-size: 11px;
+      text-align: center;
+      color: #888;
+      min-height: 16px;
+    }
+    .ok  { color: #2ecc71 !important; }
+    .err { color: #e74c3c !important; }
+  </style>
+</head>
+<body>
+  <h2>YT Controls</h2>
+  <button id="toggleBarBtn">Hide Bar</button>
+  <div id="status">Skip buttons for YouTube</div>
+  <script src="popup.js"></script>
+</body>
+</html>

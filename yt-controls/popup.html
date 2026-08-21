@@ -29,6 +29,15 @@
     }
     #toggleBarBtn { background: #2c3e50; }
     #toggleBarBtn:hover { background: #34495e; }
+    #clearStampsBtn { background: #c0392b; }
+    #clearStampsBtn:hover { background: #e74c3c; }
+    #stampInfo {
+      font-size: 11px;
+      text-align: center;
+      color: #888;
+      margin-bottom: 8px;
+      min-height: 16px;
+    }
     #status {
       font-size: 11px;
       text-align: center;
@@ -42,7 +51,9 @@
 <body>
   <h2>YT Controls</h2>
   <button id="toggleBarBtn">Hide Bar</button>
-  <div id="status">Skip buttons for YouTube</div>
+  <div id="stampInfo">—</div>
+  <button id="clearStampsBtn">Clear Stamps</button>
+  <div id="status">Skip + stamp buttons for YouTube</div>
   <script src="popup.js"></script>
 </body>
 </html>

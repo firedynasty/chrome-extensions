@@ -17,6 +17,14 @@
     v.currentTime = Math.max(0, Math.min(v.currentTime + sec, v.duration || Infinity));
   }
 
+  function changeVolume(delta) {
+    const v = video();
+    if (!v) { flashStatus('No video', '#e74c3c'); return; }
+    v.muted = false;
+    v.volume = Math.max(0, Math.min(1, Math.round((v.volume + delta) * 100) / 100));
+    flashStatus('Vol ' + Math.round(v.volume * 100) + '%', '#2ecc71');
+  }
+
   function fmtTime(sec) {
     if (!isFinite(sec) || sec < 0) return '--:--';
     const h = Math.floor(sec / 3600);
@@ -405,6 +413,12 @@
       flashStatus('Stamps cleared', '#e74c3c');
     });
 
+    // ── volume buttons ────────────────────────────────────────────────────
+    const volDownBtn = btn('🔉', '#37474f', '#fff', 'Volume down 10%');
+    const volUpBtn   = btn('🔊', '#37474f', '#fff', 'Volume up 10%');
+    volDownBtn.addEventListener('click', () => changeVolume(-0.1));
+    volUpBtn  .addEventListener('click', () => changeVolume(+0.1));
+
     // ── status flash ──────────────────────────────────────────────────────
     const statusSpan = document.createElement('span');
     statusSpan.style.cssText = 'font-size:11px; color:#888; white-space:nowrap; margin-left:4px;';
@@ -432,7 +446,7 @@
       border-top: 1px solid #3ea6ff22;
     `;
 
-    bar.append(skipBack10, skipFwd10, skipFwd30, timeSpan, divider, noteInput, stampBtn, countSpan, linkBtn, importBtn, clearBtn, statusSpan, stampsRow);
+    bar.append(skipBack10, skipFwd10, skipFwd30, timeSpan, divider, noteInput, stampBtn, countSpan, linkBtn, importBtn, clearBtn, volDownBtn, volUpBtn, statusSpan, stampsRow);
 
     player.parentElement.insertBefore(bar, player);
     injectSpacer();

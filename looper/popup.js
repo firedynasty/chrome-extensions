@@ -29,7 +29,7 @@ function loopMixInject() {
   const MODAL_ID = '__lmx_modal';
   const CHIP_ID = '__lmx_chip';
 
-  const LMX_VERSION = 5;
+  const LMX_VERSION = 7;
 
   // Re-inject with current version: module already lives in this tab — just
   // reopen the modal. Older injections (or their orphaned DOM) get torn down
@@ -40,6 +40,7 @@ function loopMixInject() {
   }
   if (window.__lmx) {
     try { if (window.__lmx.state && window.__lmx.state.interval) clearInterval(window.__lmx.state.interval); } catch (e) {}
+    try { if (window.__lmx.state && window.__lmx.state.noiseSrc) window.__lmx.state.noiseSrc.stop(); } catch (e) {}
     window.__lmx = null;
   }
   const staleModal = document.getElementById(MODAL_ID);
@@ -56,6 +57,10 @@ function loopMixInject() {
     totalLoops: 0,
     rows: [],
     noiseCtx: null,
+    noiseSrc: null,
+    noiseGain: null,
+    noiseOn: false,
+    noiseVol: 0.01,
     paused: false,
     onMediaPlay: null,
     onMediaPause: null
@@ -168,35 +173,58 @@ function loopMixInject() {
     return name;
   }
 
-  // ---------- white-noise burst at a loop boundary ----------
-  // Port of mix_mp3.py's add_boundary_noise: 0.15s white noise, amp 0.032,
-  // 30% fade in / 30% fade out — masks the seek seam between loops.
-  function playBoundaryNoise(durSec, amp) {
-    durSec = durSec || 0.15;
-    amp = amp || 0.032;
+  // ---------- continuous white noise (modal toggle, bach-player pattern) ----------
+  // Looped 2s white-noise buffer through a GainNode. Independent of the loop
+  // engine and the modal — keeps playing with the modal closed until toggled
+  // off (reopen via the toolbar icon).
+  function startNoise() {
     try {
       if (!state.noiseCtx) state.noiseCtx = new (window.AudioContext || window.webkitAudioContext)();
       const ctx = state.noiseCtx;
       if (ctx.state === 'suspended') ctx.resume();
-      const len = Math.max(1, Math.floor(ctx.sampleRate * durSec));
+      const len = ctx.sampleRate * 2;
       const buf = ctx.createBuffer(1, len, ctx.sampleRate);
       const data = buf.getChannelData(0);
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       const src = ctx.createBufferSource();
       src.buffer = buf;
+      src.loop = true;
       const gain = ctx.createGain();
-      const now = ctx.currentTime;
-      const fadeInD = durSec * 0.3;
-      const fadeOutS = durSec * 0.7;
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(amp, now + fadeInD);
-      gain.gain.setValueAtTime(amp, now + fadeOutS);
-      gain.gain.linearRampToValueAtTime(0, now + durSec);
+      gain.gain.value = state.noiseVol;
       src.connect(gain);
       gain.connect(ctx.destination);
-      src.start(now);
-      src.stop(now + durSec);
+      src.start();
+      state.noiseSrc = src;
+      state.noiseGain = gain;
+      state.noiseOn = true;
     } catch (e) {}
+  }
+
+  function stopNoise() {
+    try { if (state.noiseSrc) state.noiseSrc.stop(); } catch (e) {}
+    try { if (state.noiseSrc) state.noiseSrc.disconnect(); } catch (e) {}
+    try { if (state.noiseGain) state.noiseGain.disconnect(); } catch (e) {}
+    state.noiseSrc = null;
+    state.noiseGain = null;
+    state.noiseOn = false;
+  }
+
+  function toggleNoise() {
+    if (state.noiseOn) stopNoise(); else startNoise();
+    updateNoiseUI();
+  }
+
+  function setNoiseVol(v) {
+    state.noiseVol = Math.max(0, Math.min(1, Math.round(v * 100) / 100));
+    if (state.noiseGain) state.noiseGain.gain.value = state.noiseVol;
+    updateNoiseUI();
+  }
+
+  function updateNoiseUI() {
+    const btn = document.getElementById('__lmx_noise');
+    const lbl = document.getElementById('__lmx_noise_vol');
+    if (btn) btn.style.background = state.noiseOn ? 'linear-gradient(45deg,#26C6DA,#0097A7)' : '#2c3e50';
+    if (lbl) lbl.textContent = Math.round(state.noiseVol * 100) + '%';
   }
 
   // ---------- loop engine ----------
@@ -231,7 +259,6 @@ function loopMixInject() {
     if (m.currentTime >= state.end - 0.03) {
       if (state.loopsRemaining > 1) {
         state.loopsRemaining--;
-        playBoundaryNoise();
         m.currentTime = state.start;
         const p = m.play();
         if (p && p.catch) p.catch(() => {});
@@ -443,6 +470,39 @@ function loopMixInject() {
     btnRow.appendChild(genBtn);
     btnRow.appendChild(ytLink);
 
+    // White noise row — 🌊 toggle (gray off, teal on like bach-player) + −/+ volume
+    const noiseRow = document.createElement('div');
+    noiseRow.style.cssText = 'display:flex; gap:8px; margin-top:10px; align-items:center;';
+
+    const noiseBtn = document.createElement('button');
+    noiseBtn.id = '__lmx_noise';
+    noiseBtn.textContent = String.fromCodePoint(0x1F30A) + ' White Noise';
+    noiseBtn.title = 'Toggle continuous white noise ' + String.fromCharCode(0x2014) + ' keeps playing with the modal closed';
+    noiseBtn.style.cssText = 'padding:8px 16px; background:#2c3e50; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:700;';
+    noiseBtn.addEventListener('click', toggleNoise);
+
+    const noiseDown = document.createElement('button');
+    noiseDown.textContent = String.fromCharCode(0x2212);
+    noiseDown.title = 'Noise volume down 1%';
+    noiseDown.style.cssText = 'padding:8px 12px; background:#37474f; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:700;';
+    noiseDown.addEventListener('click', function() { setNoiseVol(state.noiseVol - 0.01); });
+
+    const noiseUp = document.createElement('button');
+    noiseUp.textContent = '+';
+    noiseUp.title = 'Noise volume up 1%';
+    noiseUp.style.cssText = noiseDown.style.cssText;
+    noiseUp.addEventListener('click', function() { setNoiseVol(state.noiseVol + 0.01); });
+
+    const noiseVolLbl = document.createElement('span');
+    noiseVolLbl.id = '__lmx_noise_vol';
+    noiseVolLbl.style.cssText = 'font-size:12px; color:#888; min-width:36px;';
+
+    noiseRow.appendChild(noiseBtn);
+    noiseRow.appendChild(noiseDown);
+    noiseRow.appendChild(noiseUp);
+    noiseRow.appendChild(noiseVolLbl);
+    updateNoiseUI();
+
     const tableContainer = document.createElement('div');
     tableContainer.id = '__lmx_table';
     tableContainer.style.cssText = 'margin-top:12px;';
@@ -457,6 +517,7 @@ function loopMixInject() {
     box.appendChild(label);
     box.appendChild(textarea);
     box.appendChild(btnRow);
+    box.appendChild(noiseRow);
     box.appendChild(tableContainer);
     box.appendChild(statusLine);
     overlay.appendChild(box);

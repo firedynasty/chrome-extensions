@@ -4,7 +4,7 @@ Loops segments of any HTML5 video or audio on any page. Ported from the **Loop M
 
 ## How It Works
 
-Click the extension icon → **🔁 Loop Mix** injects a modal into the active tab. Enter one segment per line:
+Click the extension icon → the Loop Mix modal is injected into the active tab immediately (no button to press; the popup closes itself and only stays visible if injection fails). Enter one segment per line:
 
 ```
 start, end, [loops]
@@ -15,6 +15,8 @@ start, end, [loops]
 - `3:00, 15, 3` — end **without a colon** = duration in seconds (plays 3:00→3:15, 3×)
 
 **Generate Table ▶** parses every line into a numbered table (bad lines show their error inline). Each row's **▶** starts looping that segment and closes the modal so playback stays visible.
+
+A plain YouTube URL on its own row is not a segment — it makes a **YouTube ↗** link appear next to Generate Table (opens the video in a new tab) and is ignored by the table.
 
 ## Features
 
@@ -46,7 +48,7 @@ Does **not** work on Chrome internal pages (`chrome://` URLs) — this is a Chro
 | File | Description |
 |------|-------------|
 | `manifest.json` | Manifest V3 config — `activeTab` + `scripting` permissions |
-| `popup.html` | Extension popup with the 🔁 Loop Mix button and syntax hint |
+| `popup.html` | Extension popup — auto-injects on open; stays visible only to show an injection error |
 | `popup.js` | Injects the self-contained Loop Mix modal + loop engine into the active tab |
 | `generate_icons.py` | Pillow script that regenerates the icons |
 | `icon48.png` | Toolbar icon (48x48) |

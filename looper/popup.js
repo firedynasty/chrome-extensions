@@ -1,20 +1,21 @@
-const openBtn = document.getElementById('openBtn');
 const statusEl = document.getElementById('status');
 
-openBtn.addEventListener('click', async () => {
+// No button — opening the popup injects immediately and closes itself, so the
+// toolbar icon lands straight on the modal. The popup stays open only when
+// injection fails (e.g. chrome:// pages), to show the error.
+(async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   try {
-    const results = await chrome.scripting.executeScript({
+    await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: loopMixInject
     });
-    statusEl.textContent = (results && results[0] && results[0].result) || 'Opened on page';
-    statusEl.className = 'success';
+    window.close();
   } catch (err) {
     statusEl.textContent = 'Cannot inject on this page';
     statusEl.className = 'error';
   }
-});
+})();
 
 // Injected into the page. Must be fully self-contained (no closure references) —
 // Chrome serializes and re-runs this function in the tab's JS realm.
@@ -28,7 +29,7 @@ function loopMixInject() {
   const MODAL_ID = '__lmx_modal';
   const CHIP_ID = '__lmx_chip';
 
-  const LMX_VERSION = 4;
+  const LMX_VERSION = 5;
 
   // Re-inject with current version: module already lives in this tab — just
   // reopen the modal. Older injections (or their orphaned DOM) get torn down
@@ -130,6 +131,12 @@ function loopMixInject() {
     }
 
     return { start, duration, loops, endLabel };
+  }
+
+  // Plain YouTube URL on its own row (watch?v= or youtu.be) → video id.
+  function extractYouTubeId(text) {
+    const m = text.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?[^\s]*v=([\w-]+)|youtu\.be\/([\w-]+))/);
+    return m ? (m[1] || m[2] || '') : '';
   }
 
   function escapeHtml(s) {
@@ -415,10 +422,26 @@ function loopMixInject() {
     genBtn.style.cssText = 'padding:8px 20px; background:linear-gradient(45deg,#26C6DA,#0097A7); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:700;';
     genBtn.addEventListener('click', generateTable);
 
+    // YouTube link — appears (styled like Generate Table) whenever the
+    // textarea contains a plain video URL on its own row; opens in a new tab.
+    const ytLink = document.createElement('a');
+    ytLink.textContent = 'YouTube ' + String.fromCharCode(0x2197);
+    ytLink.title = 'Open the YouTube video from the textarea in a new tab';
+    ytLink.target = '_blank';
+    ytLink.rel = 'noopener noreferrer';
+    ytLink.style.cssText = 'display:none; padding:8px 20px; background:linear-gradient(45deg,#26C6DA,#0097A7); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap;';
+
+    textarea.addEventListener('input', function() {
+      const id = extractYouTubeId(textarea.value);
+      ytLink.href = id ? 'https://www.youtube.com/watch?v=' + id : '';
+      ytLink.style.display = id ? 'inline-block' : 'none';
+    });
+
     btnRow.appendChild(stopBtn);
     btnRow.appendChild(pasteBtn);
     btnRow.appendChild(cancelBtn);
     btnRow.appendChild(genBtn);
+    btnRow.appendChild(ytLink);
 
     const tableContainer = document.createElement('div');
     tableContainer.id = '__lmx_table';
@@ -500,6 +523,8 @@ function loopMixInject() {
         return;
       }
       document.getElementById('__lmx_textarea').value = text.trim();
+      // Programmatic set doesn't fire 'input' — nudge so the YouTube link updates
+      document.getElementById('__lmx_textarea').dispatchEvent(new Event('input'));
       setStatus('Pasted ' + text.trim().split('\n').length + ' line(s) ' + String.fromCharCode(0x2014) + ' hit Generate Table');
     }).catch(function() {
       setStatus('Clipboard read blocked ' + String.fromCharCode(0x2014) + ' click the page first, then retry', true);
@@ -509,10 +534,12 @@ function loopMixInject() {
   function generateTable() {
     const raw = document.getElementById('__lmx_textarea').value;
     const container = document.getElementById('__lmx_table');
-    const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
+    const hasUrl = !!extractYouTubeId(raw);
+    // Skip YouTube URL rows — they feed the YouTube link, not the table
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l && !extractYouTubeId(l));
     if (!lines.length) {
       container.innerHTML = '';
-      setStatus('Nothing entered', true);
+      setStatus(hasUrl ? 'YouTube link only ' + String.fromCharCode(0x2014) + ' add segment lines to loop' : 'Nothing entered', true);
       return;
     }
 

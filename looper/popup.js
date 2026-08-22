@@ -29,7 +29,7 @@ function loopMixInject() {
   const MODAL_ID = '__lmx_modal';
   const CHIP_ID = '__lmx_chip';
 
-  const LMX_VERSION = 7;
+  const LMX_VERSION = 8;
 
   // Re-inject with current version: module already lives in this tab — just
   // reopen the modal. Older injections (or their orphaned DOM) get torn down
@@ -65,6 +65,12 @@ function loopMixInject() {
     onMediaPlay: null,
     onMediaPause: null
   };
+
+  // ---------- video ID (for per-video localStorage persistence) ----------
+  function getVideoId() {
+    const m = window.location.search.match(/[?&]v=([\w-]+)/);
+    return m ? m[1] : null;
+  }
 
   // ---------- time helpers (parity with the YouTube Viewer) ----------
   function formatSecondsToTime(totalSeconds) {
@@ -458,10 +464,24 @@ function loopMixInject() {
     ytLink.rel = 'noopener noreferrer';
     ytLink.style.cssText = 'display:none; padding:8px 20px; background:linear-gradient(45deg,#26C6DA,#0097A7); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap;';
 
+    // Load saved segments for this video (persists across tab closes)
+    const savedVid = getVideoId();
+    if (savedVid) {
+      try {
+        const saved = localStorage.getItem('__lmx_' + savedVid);
+        if (saved) textarea.value = saved;
+      } catch (e) {}
+    }
+
     textarea.addEventListener('input', function() {
       const id = extractYouTubeId(textarea.value);
       ytLink.href = id ? 'https://www.youtube.com/watch?v=' + id : '';
       ytLink.style.display = id ? 'inline-block' : 'none';
+      // Save segments for this video
+      const vid = getVideoId();
+      if (vid) {
+        try { localStorage.setItem('__lmx_' + vid, textarea.value); } catch (e) {}
+      }
     });
 
     btnRow.appendChild(stopBtn);

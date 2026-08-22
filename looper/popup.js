@@ -29,7 +29,7 @@ function loopMixInject() {
   const MODAL_ID = '__lmx_modal';
   const CHIP_ID = '__lmx_chip';
 
-  const LMX_VERSION = 10;
+  const LMX_VERSION = 11;
 
   // Re-inject with current version: module already lives in this tab — just
   // reopen the modal. Older injections (or their orphaned DOM) get torn down
@@ -407,6 +407,9 @@ function loopMixInject() {
     const overlay = document.createElement('div');
     overlay.id = MODAL_ID;
     overlay.style.cssText = 'display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:' + (Z_MAX - 1) + '; justify-content:center; align-items:flex-start; padding-top:80px; overflow-y:auto;';
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closeModal();
+    });
 
     const box = document.createElement('div');
     box.style.cssText = 'background:#1e1e1e; border:2px solid #26C6DA; border-radius:12px; width:92%; max-width:560px; padding:20px; margin:0 auto 40px; position:relative; box-shadow:0 12px 40px rgba(0,0,0,0.7); font-family:-apple-system,BlinkMacSystemFont,sans-serif;';

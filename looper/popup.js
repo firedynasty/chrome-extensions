@@ -29,7 +29,7 @@ function loopMixInject() {
   const MODAL_ID = '__lmx_modal';
   const CHIP_ID = '__lmx_chip';
 
-  const LMX_VERSION = 11;
+  const LMX_VERSION = 14;
 
   // Re-inject with current version: module already lives in this tab — just
   // reopen the modal. Older injections (or their orphaned DOM) get torn down
@@ -62,6 +62,7 @@ function loopMixInject() {
     noiseOn: false,
     noiseVol: 0.01,
     paused: false,
+    activeRow: -1,
     onMediaPlay: null,
     onMediaPause: null
   };
@@ -293,6 +294,7 @@ function loopMixInject() {
     detachMediaListeners();
     clearLoopInterval();
     state.paused = false;
+    state.activeRow = -1;
     hideChip();
     updateStopBtn();
     setStatus('Loop Mix cancelled');
@@ -354,12 +356,19 @@ function loopMixInject() {
   }
 
   // ---------- floating chip (visible while a loop runs, modal is closed) ----------
+  // Column layout: main row (label + pause + cancel) on top, and the segment
+  // table always visible below — every parsed segment has its own ▶ so rows
+  // can be switched without reopening the modal.
   function showChip() {
     let chip = document.getElementById(CHIP_ID);
     if (!chip) {
       chip = document.createElement('div');
       chip.id = CHIP_ID;
-      chip.style.cssText = 'position:fixed; bottom:18px; right:18px; z-index:' + Z_MAX + '; background:linear-gradient(45deg,#26C6DA,#0097A7); color:#fff; padding:8px 12px; border-radius:8px; font:700 13px -apple-system,BlinkMacSystemFont,sans-serif; box-shadow:0 4px 16px rgba(0,0,0,0.5); display:flex; align-items:center; gap:8px;';
+      chip.style.cssText = 'position:fixed; bottom:18px; right:18px; z-index:' + Z_MAX + '; background:linear-gradient(45deg,#26C6DA,#0097A7); color:#fff; padding:8px 12px; border-radius:8px; font:700 13px -apple-system,BlinkMacSystemFont,sans-serif; box-shadow:0 4px 16px rgba(0,0,0,0.5); display:flex; flex-direction:column; gap:8px; max-width:340px;';
+
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+
       const label = document.createElement('span');
       label.id = CHIP_ID + '_label';
       const pauseBtn = document.createElement('button');
@@ -373,13 +382,70 @@ function loopMixInject() {
       x.title = 'Cancel loop';
       x.style.cssText = 'background:rgba(0,0,0,0.25); border:none; color:#fff; border-radius:4px; cursor:pointer; font-size:12px; font-weight:700; padding:2px 7px;';
       x.addEventListener('click', cancelLoop);
-      chip.appendChild(label);
-      chip.appendChild(pauseBtn);
-      chip.appendChild(x);
+      row.appendChild(label);
+      row.appendChild(pauseBtn);
+      row.appendChild(x);
+
+      const panel = document.createElement('div');
+      panel.id = CHIP_ID + '_panel';
+      panel.style.cssText = 'background:rgba(0,0,0,0.25); border-radius:6px; padding:6px; max-height:240px; overflow-y:auto;';
+
+      chip.appendChild(row);
+      chip.appendChild(panel);
       document.body.appendChild(chip);
     }
     chip.style.display = 'flex';
     updatePauseBtn();
+    buildChipTable();
+  }
+
+  // Compact per-row list parsed fresh from the modal textarea (so edits show up
+  // without regenerating the modal table). Keeps state.rows in sync so row
+  // indices match runRow. The currently looping row is highlighted.
+  function buildChipTable() {
+    const panel = document.getElementById(CHIP_ID + '_panel');
+    if (!panel) return;
+    panel.innerHTML = '';
+    const ta = document.getElementById('__lmx_textarea');
+    const raw = ta ? ta.value : '';
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l && !extractYouTubeId(l));
+    if (!lines.length) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'font-size:12px; font-weight:400; opacity:0.85; padding:2px 4px;';
+      empty.textContent = 'No segments ' + String.fromCharCode(0x2014) + ' open the modal to add lines';
+      panel.appendChild(empty);
+      return;
+    }
+    state.rows = [];
+    lines.forEach((line, i) => {
+      const parsed = parseLoopMixLine(line);
+      state.rows.push(parsed.error ? null : parsed);
+      const active = i === state.activeRow && (state.interval || state.paused);
+      const rowEl = document.createElement('div');
+      rowEl.style.cssText = 'display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:4px; font-size:12px;'
+        + (active ? ' background:rgba(255,255,255,0.25);' : '')
+        + (i < lines.length - 1 ? ' border-bottom:1px solid rgba(255,255,255,0.15);' : '');
+      const txt = document.createElement('span');
+      txt.style.cssText = 'flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-weight:400;';
+      if (parsed.error) {
+        txt.style.color = '#FFCDD2';
+        txt.textContent = (i + 1) + '. ' + parsed.error;
+        txt.title = line;
+      } else {
+        txt.textContent = (i + 1) + '. ' + formatSecondsToTime(parsed.start) + String.fromCharCode(0x2192) + formatSecondsToTime(parsed.start + parsed.duration)
+          + (parsed.loops > 1 ? ' ' + String.fromCharCode(0x00D7) + parsed.loops : '');
+      }
+      rowEl.appendChild(txt);
+      if (!parsed.error) {
+        const play = document.createElement('button');
+        play.textContent = String.fromCharCode(0x25B6);
+        play.title = 'Loop this segment';
+        play.style.cssText = 'background:rgba(0,0,0,0.25); border:none; color:#fff; border-radius:4px; cursor:pointer; font-size:11px; font-weight:700; padding:2px 8px; flex-shrink:0;';
+        play.addEventListener('click', function() { runRow(i); });
+        rowEl.appendChild(play);
+      }
+      panel.appendChild(rowEl);
+    });
   }
 
   function updateChip() {
@@ -488,7 +554,14 @@ function loopMixInject() {
       ytLink.style.display = id ? 'inline-block' : 'none';
       // Save segments for this video (extension-scoped, visible on any page)
       const vid = getVideoId();
-      if (vid) chrome.storage.local.set({ ['__lmx_' + vid]: textarea.value });
+      if (vid) {
+        const toSet = { ['__lmx_' + vid]: textarea.value };
+        // Companion title key so the saved list can show videos by name, not
+        // just ID. On a watch page the document title is "<title> - YouTube".
+        const pageTitle = (document.title || '').replace(/ - YouTube$/, '').trim();
+        if (pageTitle) toSet['__lmx_title_' + vid] = pageTitle;
+        chrome.storage.local.set(toSet);
+      }
     });
 
     btnRow.appendChild(stopBtn);
@@ -692,7 +765,9 @@ function loopMixInject() {
     const row = state.rows[i];
     if (!row) return;
     if (startLoop(row.start, row.duration, row.loops)) {
+      state.activeRow = i;
       closeModal();
+      buildChipTable(); // refresh active-row highlight (panel may be open)
     }
   }
 
@@ -706,7 +781,7 @@ function loopMixInject() {
 
     chrome.storage.local.get(null, function(all) {
       container.innerHTML = '';
-      const keys = Object.keys(all).filter(function(k) { return k.startsWith('__lmx_'); });
+      const keys = Object.keys(all).filter(function(k) { return k.startsWith('__lmx_') && !k.startsWith('__lmx_title_'); });
 
       if (!keys.length) {
         const empty = document.createElement('div');
@@ -720,6 +795,8 @@ function loopMixInject() {
         const vid = key.slice(6); // strip '__lmx_'
         const raw = all[key] || '';
         const firstLine = raw.split('\n').map(function(l) { return l.trim(); }).find(function(l) { return l; }) || '';
+        const savedTitle = (all['__lmx_title_' + vid] || '').trim();
+        const snippet = savedTitle.length > 20 ? savedTitle.slice(0, 20) + String.fromCharCode(0x2026) : savedTitle;
 
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; align-items:center; gap:6px; padding:3px 0; border-bottom:1px solid #2a2a2a;';
@@ -729,15 +806,15 @@ function loopMixInject() {
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.style.cssText = 'color:#26C6DA; font-size:12px; text-decoration:none; flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;';
-        link.textContent = vid + (firstLine ? '  \u00B7  ' + firstLine : '');
-        link.title = firstLine || vid;
+        link.textContent = (snippet ? snippet + '  ' + String.fromCharCode(0xB7) + '  ' : '') + vid + (firstLine ? '  \u00B7  ' + firstLine : '');
+        link.title = savedTitle || firstLine || vid;
 
         const delBtn = document.createElement('button');
         delBtn.textContent = String.fromCharCode(0x2715);
         delBtn.title = 'Delete saved segments for this video';
         delBtn.style.cssText = 'background:#37474F; border:none; color:#aaa; border-radius:3px; cursor:pointer; font-size:11px; padding:1px 7px; flex-shrink:0;';
         delBtn.addEventListener('click', function() {
-          chrome.storage.local.remove(key, function() {
+          chrome.storage.local.remove([key, '__lmx_title_' + vid], function() {
             // If deleting the current video, clear the textarea too
             if (vid === getVideoId()) {
               const ta = document.getElementById('__lmx_textarea');

@@ -23,7 +23,7 @@ A plain YouTube URL on its own row is not a segment — it makes a **YouTube ↗
 - **mix_mp3.py parsing semantics** — colon end = absolute timestamp, plain-number end = duration; loops default to 1
 - **Paste Clipboard button** — fills the textarea from the clipboard (same as the Viewer's Paste Media modal)
 - **White noise toggle** — 🌊 button in the modal plays continuous looped white noise (same pattern as bach-player) with −/+ volume buttons and a % readout; keeps playing with the modal closed, reopen via the toolbar icon to stop/adjust
-- **Floating chip** while a loop runs (`🔁 1:30→1:44 · loop 2/5`) with ⏸/▶ to pause/resume and ✕ to cancel — pausing suspends the loop engine too (interval cleared), resuming restarts it; pause/play from the page's own controls suspends/resumes the looper as well. Cancel stops rewinding but leaves playback running
+- **Floating chip** while a loop runs (`🔁 1:30→1:44 · loop 2/5`) with ⏸/▶ to pause/resume and ✕ to cancel — pausing suspends the loop engine too (interval cleared), resuming restarts it; pause/play from the page's own controls suspends/resumes the looper as well. Cancel stops rewinding but leaves playback running. The chip always shows the **segment table** below the label (parsed fresh from the modal textarea) with a per-row ▶, so you can switch rows without reopening the modal — the currently looping row is highlighted
 - After the final loop, the loop engine stops and **playback keeps going** — no pause
 - **Escape** closes the modal, **Ctrl/Cmd+Enter** generates the table
 - Works on any `<video>`/`<audio>` — prefers the currently playing element, falls back to the largest one

@@ -29,7 +29,7 @@ function loopMixInject() {
   const MODAL_ID = '__lmx_modal';
   const CHIP_ID = '__lmx_chip';
 
-  const LMX_VERSION = 9;
+  const LMX_VERSION = 10;
 
   // Re-inject with current version: module already lives in this tab — just
   // reopen the modal. Older injections (or their orphaned DOM) get torn down
@@ -66,7 +66,10 @@ function loopMixInject() {
     onMediaPause: null
   };
 
-  // ---------- video ID (for per-video localStorage persistence) ----------
+  // ---------- video ID (for per-video chrome.storage.local persistence) ----------
+  // executeScript runs in ISOLATED world by default, so chrome.storage.local
+  // is available here and is extension-scoped (not origin-scoped like localStorage),
+  // meaning saved segments are visible regardless of which page the looper is opened on.
   function getVideoId() {
     const m = window.location.search.match(/[?&]v=([\w-]+)/);
     return m ? m[1] : null;
@@ -464,24 +467,25 @@ function loopMixInject() {
     ytLink.rel = 'noopener noreferrer';
     ytLink.style.cssText = 'display:none; padding:8px 20px; background:linear-gradient(45deg,#26C6DA,#0097A7); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap;';
 
-    // Load saved segments for this video (persists across tab closes)
+    // Load saved segments for this video from extension-scoped storage
     const savedVid = getVideoId();
     if (savedVid) {
-      try {
-        const saved = localStorage.getItem('__lmx_' + savedVid);
-        if (saved) textarea.value = saved;
-      } catch (e) {}
+      chrome.storage.local.get('__lmx_' + savedVid, function(result) {
+        const saved = result['__lmx_' + savedVid];
+        if (saved && !textarea.value) {
+          textarea.value = saved;
+          textarea.dispatchEvent(new Event('input'));
+        }
+      });
     }
 
     textarea.addEventListener('input', function() {
       const id = extractYouTubeId(textarea.value);
       ytLink.href = id ? 'https://www.youtube.com/watch?v=' + id : '';
       ytLink.style.display = id ? 'inline-block' : 'none';
-      // Save segments for this video
+      // Save segments for this video (extension-scoped, visible on any page)
       const vid = getVideoId();
-      if (vid) {
-        try { localStorage.setItem('__lmx_' + vid, textarea.value); } catch (e) {}
-      }
+      if (vid) chrome.storage.local.set({ ['__lmx_' + vid]: textarea.value });
     });
 
     btnRow.appendChild(stopBtn);
@@ -690,66 +694,60 @@ function loopMixInject() {
   }
 
   // ---------- saved videos list ----------
-  // Scans localStorage for __lmx_* keys and renders a list of clickable
-  // YouTube links with an X to delete the saved segments for that video.
+  // Reads all __lmx_* keys from chrome.storage.local (extension-scoped, so
+  // visible on any page) and renders clickable YouTube links with X to delete.
   function buildSavedList() {
     const container = document.getElementById('__lmx_saved_list');
     if (!container) return;
     container.innerHTML = '';
 
-    const keys = [];
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('__lmx_')) keys.push(k);
+    chrome.storage.local.get(null, function(all) {
+      container.innerHTML = '';
+      const keys = Object.keys(all).filter(function(k) { return k.startsWith('__lmx_'); });
+
+      if (!keys.length) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'font-size:11px; color:#555; padding:4px 0;';
+        empty.textContent = 'No saved segments yet';
+        container.appendChild(empty);
+        return;
       }
-    } catch (e) {}
 
-    if (!keys.length) {
-      const empty = document.createElement('div');
-      empty.style.cssText = 'font-size:11px; color:#555; padding:4px 0;';
-      empty.textContent = 'No saved segments yet';
-      container.appendChild(empty);
-      return;
-    }
+      keys.forEach(function(key) {
+        const vid = key.slice(6); // strip '__lmx_'
+        const raw = all[key] || '';
+        const firstLine = raw.split('\n').map(function(l) { return l.trim(); }).find(function(l) { return l; }) || '';
 
-    keys.forEach(function(key) {
-      const vid = key.slice(6); // strip '__lmx_'
-      let preview = '';
-      try {
-        const raw = localStorage.getItem(key) || '';
-        const firstLine = raw.split('\n').map(function(l) { return l.trim(); }).find(function(l) { return l; });
-        if (firstLine) preview = firstLine;
-      } catch (e) {}
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:6px; padding:3px 0; border-bottom:1px solid #2a2a2a;';
 
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex; align-items:center; gap:6px; padding:3px 0; border-bottom:1px solid #2a2a2a;';
+        const link = document.createElement('a');
+        link.href = 'https://www.youtube.com/watch?v=' + vid;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.style.cssText = 'color:#26C6DA; font-size:12px; text-decoration:none; flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;';
+        link.textContent = vid + (firstLine ? '  \u00B7  ' + firstLine : '');
+        link.title = firstLine || vid;
 
-      const link = document.createElement('a');
-      link.href = 'https://www.youtube.com/watch?v=' + vid;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.style.cssText = 'color:#26C6DA; font-size:12px; text-decoration:none; flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;';
-      link.textContent = vid + (preview ? '  \u00B7  ' + preview : '');
-      link.title = preview || vid;
+        const delBtn = document.createElement('button');
+        delBtn.textContent = String.fromCharCode(0x2715);
+        delBtn.title = 'Delete saved segments for this video';
+        delBtn.style.cssText = 'background:#37474F; border:none; color:#aaa; border-radius:3px; cursor:pointer; font-size:11px; padding:1px 7px; flex-shrink:0;';
+        delBtn.addEventListener('click', function() {
+          chrome.storage.local.remove(key, function() {
+            // If deleting the current video, clear the textarea too
+            if (vid === getVideoId()) {
+              const ta = document.getElementById('__lmx_textarea');
+              if (ta) { ta.value = ''; ta.dispatchEvent(new Event('input')); }
+            }
+            buildSavedList();
+          });
+        });
 
-      const delBtn = document.createElement('button');
-      delBtn.textContent = String.fromCharCode(0x2715);
-      delBtn.title = 'Delete saved segments for this video';
-      delBtn.style.cssText = 'background:#37474F; border:none; color:#aaa; border-radius:3px; cursor:pointer; font-size:11px; padding:1px 7px; flex-shrink:0;';
-      delBtn.addEventListener('click', function() {
-        try { localStorage.removeItem(key); } catch (e) {}
-        // If deleting the current video, clear the textarea too
-        if (vid === getVideoId()) {
-          const ta = document.getElementById('__lmx_textarea');
-          if (ta) { ta.value = ''; ta.dispatchEvent(new Event('input')); }
-        }
-        buildSavedList();
+        row.appendChild(link);
+        row.appendChild(delBtn);
+        container.appendChild(row);
       });
-
-      row.appendChild(link);
-      row.appendChild(delBtn);
-      container.appendChild(row);
     });
   }
 

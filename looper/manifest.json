@@ -3,7 +3,7 @@
   "name": "Loop Mix — Segment Looper",
   "version": "1.0",
   "description": "Loop segments of any HTML5 video/audio: one line per segment — start, end, [loops]. Ported from the YouTube Viewer's Loop Mix modal.",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

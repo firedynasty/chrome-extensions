@@ -29,7 +29,7 @@ function loopMixInject() {
   const MODAL_ID = '__lmx_modal';
   const CHIP_ID = '__lmx_chip';
 
-  const LMX_VERSION = 8;
+  const LMX_VERSION = 9;
 
   // Re-inject with current version: module already lives in this tab — just
   // reopen the modal. Older injections (or their orphaned DOM) get torn down
@@ -531,6 +531,21 @@ function loopMixInject() {
     statusLine.id = '__lmx_status';
     statusLine.style.cssText = 'margin-top:10px; font-size:12px; min-height:16px; color:#888;';
 
+    // Saved videos section
+    const savedSection = document.createElement('div');
+    savedSection.style.cssText = 'border-top:1px solid #333; margin-top:10px; padding-top:8px;';
+
+    const savedHeader = document.createElement('div');
+    savedHeader.style.cssText = 'font-size:11px; color:#666; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;';
+    savedHeader.textContent = 'Saved videos';
+
+    const savedList = document.createElement('div');
+    savedList.id = '__lmx_saved_list';
+    savedList.style.cssText = 'max-height:120px; overflow-y:auto;';
+
+    savedSection.appendChild(savedHeader);
+    savedSection.appendChild(savedList);
+
     box.appendChild(closeX);
     box.appendChild(title);
     box.appendChild(info);
@@ -540,6 +555,7 @@ function loopMixInject() {
     box.appendChild(noiseRow);
     box.appendChild(tableContainer);
     box.appendChild(statusLine);
+    box.appendChild(savedSection);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
 
@@ -570,6 +586,7 @@ function loopMixInject() {
       info.textContent = 'No video/audio found on this page yet ' + String.fromCharCode(0x2014) + ' start playback, then reopen.';
     }
     updateStopBtn();
+    buildSavedList();
     modal.style.display = 'flex';
     setTimeout(() => document.getElementById('__lmx_textarea').focus(), 50);
   }
@@ -670,6 +687,70 @@ function loopMixInject() {
     if (startLoop(row.start, row.duration, row.loops)) {
       closeModal();
     }
+  }
+
+  // ---------- saved videos list ----------
+  // Scans localStorage for __lmx_* keys and renders a list of clickable
+  // YouTube links with an X to delete the saved segments for that video.
+  function buildSavedList() {
+    const container = document.getElementById('__lmx_saved_list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const keys = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('__lmx_')) keys.push(k);
+      }
+    } catch (e) {}
+
+    if (!keys.length) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'font-size:11px; color:#555; padding:4px 0;';
+      empty.textContent = 'No saved segments yet';
+      container.appendChild(empty);
+      return;
+    }
+
+    keys.forEach(function(key) {
+      const vid = key.slice(6); // strip '__lmx_'
+      let preview = '';
+      try {
+        const raw = localStorage.getItem(key) || '';
+        const firstLine = raw.split('\n').map(function(l) { return l.trim(); }).find(function(l) { return l; });
+        if (firstLine) preview = firstLine;
+      } catch (e) {}
+
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:6px; padding:3px 0; border-bottom:1px solid #2a2a2a;';
+
+      const link = document.createElement('a');
+      link.href = 'https://www.youtube.com/watch?v=' + vid;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.style.cssText = 'color:#26C6DA; font-size:12px; text-decoration:none; flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;';
+      link.textContent = vid + (preview ? '  \u00B7  ' + preview : '');
+      link.title = preview || vid;
+
+      const delBtn = document.createElement('button');
+      delBtn.textContent = String.fromCharCode(0x2715);
+      delBtn.title = 'Delete saved segments for this video';
+      delBtn.style.cssText = 'background:#37474F; border:none; color:#aaa; border-radius:3px; cursor:pointer; font-size:11px; padding:1px 7px; flex-shrink:0;';
+      delBtn.addEventListener('click', function() {
+        try { localStorage.removeItem(key); } catch (e) {}
+        // If deleting the current video, clear the textarea too
+        if (vid === getVideoId()) {
+          const ta = document.getElementById('__lmx_textarea');
+          if (ta) { ta.value = ''; ta.dispatchEvent(new Event('input')); }
+        }
+        buildSavedList();
+      });
+
+      row.appendChild(link);
+      row.appendChild(delBtn);
+      container.appendChild(row);
+    });
   }
 
   buildModal();

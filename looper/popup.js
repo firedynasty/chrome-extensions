@@ -796,7 +796,7 @@ function loopMixInject() {
         const raw = all[key] || '';
         const firstLine = raw.split('\n').map(function(l) { return l.trim(); }).find(function(l) { return l; }) || '';
         const savedTitle = (all['__lmx_title_' + vid] || '').trim();
-        const snippet = savedTitle.length > 20 ? savedTitle.slice(0, 20) + String.fromCharCode(0x2026) : savedTitle;
+        const snippet = savedTitle.length > 45 ? savedTitle.slice(0, 45) + String.fromCharCode(0x2026) : savedTitle;
 
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; align-items:center; gap:6px; padding:3px 0; border-bottom:1px solid #2a2a2a;';

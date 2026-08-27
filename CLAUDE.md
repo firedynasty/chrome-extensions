@@ -27,6 +27,9 @@ Loops segments of any HTML5 video/audio on any page. Port of the YouTube Viewer'
 ### yt-notes (Click Transcript to Collect)
 Lazy note-taking on YouTube watch pages. No popup — the toolbar icon toggles capture mode directly via an `action.onClicked` service worker (event-driven exception to the no-background-scripts convention). Clicks on the native transcript segments are intercepted (capture phase, so the video doesn't seek) and the text is appended to a running buffer; a floating dialog shows compact `[n]` chips per collected line with a typed-note input and Copy+Clear/Clear/close buttons. Every append rewrites the clipboard with the full blank-line-joined list. Auto-opens the transcript panel if needed. Version-stamped singleton (`window.__ytn`).
 
+### copy-text-tooltip
+Select any text on a page and a tooltip appears beside it with a one-click Copy button (snippet preview + char count, `navigator.clipboard` with `execCommand` fallback). Toolbar-icon toggle via `action.onClicked`, no popup. A floating ON/OFF chip (bottom-right) shows state — click to pause/resume, its `x` to deactivate. `mousedown` capture-phase handler closes the tooltip on outside press; presses inside are guarded and shielded from the page (`stopPropagation`, plus `preventDefault` on mousedown so the selection survives until Copy is clicked). Version-stamped singleton (`window.__ctx`).
+
 ## Conventions
 
 - All extensions use Manifest V3 with minimal permissions (`activeTab` + `scripting`)

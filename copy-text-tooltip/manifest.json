@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Copy Text Tooltip",
+  "version": "1.0",
+  "description": "Select text on any page and a tooltip appears with a one-click Copy button. Toggle on/off via the toolbar icon.",
+  "permissions": ["activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    },
+    "default_title": "Toggle Copy Text Tooltip"
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

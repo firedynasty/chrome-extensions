@@ -209,6 +209,9 @@ function getState(status) {
     metIsPlaying,
     metBpm,
     metVolume: Math.round(metVolume * 100),
+    beatsIsPlaying,
+    beatsBpm,
+    beatsVolume: Math.round(beatsVolume * 100),
     status: status || ''
   };
 }
@@ -445,6 +448,122 @@ async function metTapBeat() {
   broadcastState();
 }
 
+// ---- Beats Sequencer ----
+const BEATS_STEPS = 8;
+let beatsCtx = null, beatsMaster = null;
+let beatsBpm = 120;
+let beatsIsPlaying = false;
+let beatsCurrentStep = 0;
+let beatsNextNoteTime = 0;
+let beatsTimer = null;
+let beatsVolume = 0.7;
+let beatsGrid = {
+  kick:  new Array(8).fill(0),
+  snare: new Array(8).fill(0),
+  hat:   new Array(8).fill(0),
+  crash: new Array(8).fill(0),
+  tone:  new Array(8).fill(0),
+};
+const BEATS_SWING = 0.25;
+const BEATS_HUMANIZE = 0.004;
+
+function ensureBeatsAudio() {
+  if (beatsCtx) return;
+  beatsCtx = new AudioContext();
+  beatsMaster = beatsCtx.createGain();
+  beatsMaster.gain.value = beatsVolume;
+  beatsMaster.connect(beatsCtx.destination);
+}
+
+function bKick(t) {
+  const osc = beatsCtx.createOscillator(), g = beatsCtx.createGain();
+  osc.frequency.setValueAtTime(150, t);
+  osc.frequency.exponentialRampToValueAtTime(45, t+0.12);
+  g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.22);
+  osc.connect(g).connect(beatsMaster); osc.start(t); osc.stop(t+0.25);
+}
+function bSnare(t) {
+  const sz = beatsCtx.sampleRate*0.15, buf = beatsCtx.createBuffer(1,sz,beatsCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<sz;i++) d[i]=(Math.random()*2-1)*(1-i/sz);
+  const n=beatsCtx.createBufferSource(); n.buffer=buf;
+  const f=beatsCtx.createBiquadFilter(); f.type='highpass'; f.frequency.value=1200;
+  const g=beatsCtx.createGain();
+  g.gain.setValueAtTime(0.55,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.15);
+  n.connect(f).connect(g).connect(beatsMaster); n.start(t); n.stop(t+0.15);
+  const osc=beatsCtx.createOscillator(), og=beatsCtx.createGain();
+  osc.frequency.value=190;
+  og.gain.setValueAtTime(0.3,t); og.gain.exponentialRampToValueAtTime(0.001,t+0.1);
+  osc.connect(og).connect(beatsMaster); osc.start(t); osc.stop(t+0.1);
+}
+function bHat(t) {
+  const sz=beatsCtx.sampleRate*0.05, buf=beatsCtx.createBuffer(1,sz,beatsCtx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<sz;i++) d[i]=(Math.random()*2-1);
+  const n=beatsCtx.createBufferSource(); n.buffer=buf;
+  const f=beatsCtx.createBiquadFilter(); f.type='highpass'; f.frequency.value=7000;
+  const g=beatsCtx.createGain();
+  g.gain.setValueAtTime(0.28,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.04);
+  n.connect(f).connect(g).connect(beatsMaster); n.start(t); n.stop(t+0.05);
+}
+function bCrash(t) {
+  [180,243,310,410,560].forEach((f,idx)=>{
+    const osc=beatsCtx.createOscillator(), g=beatsCtx.createGain();
+    osc.type='sine'; osc.frequency.value=f*(1+idx*0.003);
+    g.gain.setValueAtTime(0.16/(idx+1),t); g.gain.exponentialRampToValueAtTime(0.001,t+0.9);
+    osc.connect(g).connect(beatsMaster); osc.start(t); osc.stop(t+0.9);
+  });
+  const sz=beatsCtx.sampleRate*0.9, buf=beatsCtx.createBuffer(1,sz,beatsCtx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<sz;i++) d[i]=(Math.random()*2-1);
+  const n=beatsCtx.createBufferSource(); n.buffer=buf;
+  const f=beatsCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=3500; f.Q.value=0.6;
+  const g=beatsCtx.createGain();
+  g.gain.setValueAtTime(0.22,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.85);
+  n.connect(f).connect(g).connect(beatsMaster); n.start(t); n.stop(t+0.85);
+}
+function bTone(t) {
+  const osc=beatsCtx.createOscillator(), g=beatsCtx.createGain();
+  osc.type='triangle'; osc.frequency.value=330;
+  g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+  osc.connect(g).connect(beatsMaster); osc.start(t); osc.stop(t+0.2);
+}
+
+function beatsScheduler() {
+  const stepDur = (60/beatsBpm)/2; // 8th notes
+  while(beatsNextNoteTime < beatsCtx.currentTime + 0.15) {
+    const isOff = beatsCurrentStep % 2 === 1;
+    const t = beatsNextNoteTime + (isOff ? stepDur*BEATS_SWING : 0) + (Math.random()*2-1)*BEATS_HUMANIZE;
+    const s = beatsCurrentStep;
+    if(beatsGrid.kick[s]) bKick(t);
+    if(beatsGrid.snare[s]) bSnare(t);
+    if(beatsGrid.hat[s]) bHat(t);
+    if(beatsGrid.crash[s]) bCrash(t);
+    if(beatsGrid.tone[s]) bTone(t);
+    const delay = Math.max(0,(t-beatsCtx.currentTime)*1000);
+    setTimeout(()=>{ chrome.runtime.sendMessage({type:'beatsStep',stepIdx:s}).catch(()=>{}); }, delay);
+    beatsNextNoteTime += stepDur;
+    beatsCurrentStep = (beatsCurrentStep+1)%BEATS_STEPS;
+  }
+}
+
+async function beatsStart() {
+  ensureBeatsAudio();
+  if(beatsCtx.state==='suspended') await beatsCtx.resume();
+  beatsCurrentStep=0;
+  beatsNextNoteTime=beatsCtx.currentTime+0.05;
+  beatsTimer=setInterval(beatsScheduler,25);
+  beatsIsPlaying=true;
+  broadcastState();
+}
+
+function beatsStop() {
+  if(beatsTimer) clearInterval(beatsTimer);
+  beatsTimer=null;
+  beatsIsPlaying=false;
+  broadcastState();
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.target !== 'offscreen') return;
   if (msg.type === 'getState') {
@@ -512,5 +631,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     metVolume = msg.value / 100;
     if (metMaster) metMaster.gain.value = metVolume;
     broadcastState();
+  } else if (msg.type === 'beatsToggle') {
+    if(beatsIsPlaying) beatsStop(); else beatsStart();
+  } else if (msg.type === 'beatsBpm') {
+    beatsBpm = msg.value;
+  } else if (msg.type === 'beatsVolume') {
+    beatsVolume = msg.value / 100;
+    if(beatsMaster) beatsMaster.gain.value = beatsVolume;
+  } else if (msg.type === 'beatsLoadGrid') {
+    beatsGrid = msg.grid;
+    if(msg.bpm) beatsBpm = msg.bpm;
   }
 });

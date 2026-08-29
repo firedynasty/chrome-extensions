@@ -15,8 +15,8 @@ async function ensureOffscreen() {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Only handle messages from popup (no target field yet).
-  // stateUpdate and metBeat are broadcasts from offscreen → popup; leave them alone.
-  if (msg.target === 'offscreen' || msg.type === 'stateUpdate' || msg.type === 'metBeat' || msg.type === 'beatsStep') return;
+  // stateUpdate and beatsStep are broadcasts from offscreen → popup; leave them alone.
+  if (msg.target === 'offscreen' || msg.type === 'stateUpdate' || msg.type === 'beatsStep') return;
 
   ensureOffscreen().then(() => {
     const forward = { ...msg, target: 'offscreen' };

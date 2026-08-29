@@ -12,36 +12,12 @@ const statusEl = document.getElementById('status');
 const trackListEl = document.getElementById('trackList');
 const genreSelect = document.getElementById('genreSelect');
 const albumSelect = document.getElementById('albumSelect');
-const metBpmSlider = document.getElementById('metBpmSlider');
-const metBpmLabel = document.getElementById('metBpmLabel');
-const metVolSlider = document.getElementById('metVolSlider');
-const metStartStopBtn = document.getElementById('metStartStopBtn');
-const metTapBtn = document.getElementById('metTapBtn');
 const rateLabel = document.getElementById('rateLabel');
 const rateDownBtn = document.getElementById('rateDown');
 const rateUpBtn = document.getElementById('rateUp');
 const timer3minBtn = document.getElementById('timer3minBtn');
 const ytLink = document.getElementById('ytLink');
 const ytAnchor = document.getElementById('ytAnchor');
-const metLights = [
-  document.getElementById('metL0'),
-  document.getElementById('metL1'),
-  document.getElementById('metL2'),
-  document.getElementById('metL3'),
-];
-
-function flashMetLight(beatIdx, accent) {
-  metLights.forEach(l => l.classList.remove('on-accent', 'on-tick'));
-  const light = metLights[beatIdx];
-  if (light) {
-    light.classList.add(accent ? 'on-accent' : 'on-tick');
-    setTimeout(() => light.classList.remove('on-accent', 'on-tick'), 120);
-  }
-}
-
-function clearMetLights() {
-  metLights.forEach(l => l.classList.remove('on-accent', 'on-tick'));
-}
 
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 let currentRate = 1;
@@ -83,18 +59,6 @@ function applyState(state) {
     noiseBtn.style.background = '#2c3e50';
     noiseBtn.style.color = '#fff';
   }
-
-  if (state.metBpm !== undefined) {
-    metBpmSlider.value = state.metBpm;
-    metBpmLabel.textContent = state.metBpm;
-  }
-  if (state.metVolume !== undefined) {
-    metVolSlider.value = state.metVolume;
-  }
-  metStartStopBtn.innerHTML = state.metIsPlaying ? '&#9646;&#9646; Stop (Space)' : '&#9654; Start (Space)';
-  metStartStopBtn.style.background = state.metIsPlaying ? '#c9a84c' : '#2c3e50';
-  metStartStopBtn.style.color = state.metIsPlaying ? '#1a1a2e' : '#fff';
-  if (!state.metIsPlaying) clearMetLights();
 
   volumeSlider.value = state.volume;
 
@@ -207,47 +171,6 @@ nextBtn.addEventListener('click', () => send({ type: 'next' }));
 prevBtn.addEventListener('click', () => send({ type: 'prev' }));
 shuffleBtn.addEventListener('click', () => send({ type: 'shuffle' }));
 noiseBtn.addEventListener('click', () => send({ type: 'toggleNoise' }));
-metBpmSlider.addEventListener('input', () => {
-  metBpmLabel.textContent = metBpmSlider.value;
-  send({ type: 'metBpm', value: parseInt(metBpmSlider.value) });
-});
-metVolSlider.addEventListener('input', () => {
-  send({ type: 'metVolume', value: parseInt(metVolSlider.value) });
-});
-metStartStopBtn.addEventListener('click', () => send({ type: 'metToggle' }));
-metTapBtn.addEventListener('click', () => send({ type: 'metTap' }));
-
-const metTempoPreset = document.getElementById('metTempoPreset');
-
-function applyTempoPreset() {
-  const val = parseInt(metTempoPreset.value);
-  if (val) {
-    metBpmSlider.value = val;
-    metBpmLabel.textContent = val;
-    send({ type: 'metBpm', value: val });
-  }
-}
-
-metTempoPreset.addEventListener('change', applyTempoPreset);
-
-document.getElementById('metTempoPrev').addEventListener('click', () => {
-  const idx = metTempoPreset.selectedIndex;
-  if (idx > 1) {
-    metTempoPreset.selectedIndex = idx - 1;
-  } else {
-    metTempoPreset.selectedIndex = 1;
-  }
-  applyTempoPreset();
-});
-
-document.getElementById('metTempoNext').addEventListener('click', () => {
-  const idx = metTempoPreset.selectedIndex;
-  if (idx < metTempoPreset.options.length - 1) {
-    metTempoPreset.selectedIndex = idx + 1;
-  }
-  applyTempoPreset();
-});
-
 volumeSlider.addEventListener('input', () => {
   send({ type: 'volume', value: parseInt(volumeSlider.value) });
 });
@@ -262,8 +185,6 @@ progressBar.addEventListener('click', (e) => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'stateUpdate') {
     applyState(msg);
-  } else if (msg.type === 'metBeat') {
-    setTimeout(() => flashMetLight(msg.beatIdx, msg.accent), msg.delay);
   } else if (msg.type === 'beatsStep') {
     beatsMarkStep(msg.stepIdx);
   }
@@ -272,14 +193,6 @@ chrome.runtime.onMessage.addListener((msg) => {
 function adjustVolume(delta) {
   volumeSlider.value = Math.min(100, Math.max(0, parseInt(volumeSlider.value) + delta));
   send({ type: 'volume', value: parseInt(volumeSlider.value) });
-  metVolSlider.value = Math.min(100, Math.max(0, parseInt(metVolSlider.value) + delta));
-  send({ type: 'metVolume', value: parseInt(metVolSlider.value) });
-}
-
-function adjustBpm(delta) {
-  metBpmSlider.value = Math.min(240, Math.max(40, parseInt(metBpmSlider.value) + delta));
-  metBpmLabel.textContent = metBpmSlider.value;
-  send({ type: 'metBpm', value: parseInt(metBpmSlider.value) });
 }
 
 function stepRate(delta) {
@@ -296,25 +209,12 @@ rateUpBtn.addEventListener('click', () => stepRate(1));
 timer3minBtn.addEventListener('click', () => send({ type: 'timer3minToggle' }));
 
 document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') {
-    // Let selects keep their default space behavior (open dropdown)
-    if (e.target.tagName === 'SELECT') return;
-    e.preventDefault();
-    metStartStopBtn.click();
-  } else if (e.key === '[') {
-    document.getElementById('metTempoPrev').click();
-  } else if (e.key === ']') {
-    document.getElementById('metTempoNext').click();
-  } else if (e.key === '0') {
+  if (e.key === '0') {
     playBtn.click();
   } else if (e.key === '=' || e.key === '+') {
     adjustVolume(5);
   } else if (e.key === '-' || e.key === '_') {
     adjustVolume(-5);
-  } else if (e.key === 'o') {
-    adjustBpm(-2);
-  } else if (e.key === 'p') {
-    adjustBpm(2);
   } else if (e.key === ',') {
     stepRate(-1);
   } else if (e.key === '.') {
@@ -348,6 +248,12 @@ async function saveBeatsPresets(arr) {
 async function loadBeatsPresetsFromStorage() {
   const r = await chrome.storage.local.get('beatsPresets');
   return r.beatsPresets || [];
+}
+
+async function saveBeatsLiveState() {
+  if (!beatsCurrentGrid) return;
+  const bpm = parseInt(document.getElementById('beatsBpmSlider').value);
+  chrome.storage.local.set({ beatsLiveGrid: beatsCurrentGrid, beatsLiveBpm: bpm }).catch(() => {});
 }
 
 // ── 16-step → 8-step conversion ───────────────────────────────────────────────
@@ -385,7 +291,17 @@ function populateBeatsDropdown() {
 async function initBeats() {
   beatsPresets = await loadBeatsPresetsFromStorage();
   populateBeatsDropdown();
-  if (beatsPresets.length) selectBeatsPreset(0);
+  const saved = await chrome.storage.local.get(['beatsLiveGrid', 'beatsLiveBpm']);
+  if (saved.beatsLiveGrid) {
+    beatsCurrentGrid = saved.beatsLiveGrid;
+    const bpm = saved.beatsLiveBpm || 120;
+    document.getElementById('beatsBpmSlider').value = bpm;
+    document.getElementById('beatsBpmLabel').textContent = bpm;
+    renderBeatsGrid();
+    send({ type: 'beatsLoadGrid', grid: beatsCurrentGrid, bpm });
+  } else if (beatsPresets.length) {
+    selectBeatsPreset(0);
+  }
 }
 
 function selectBeatsPreset(idx) {
@@ -396,6 +312,7 @@ function selectBeatsPreset(idx) {
   document.getElementById('beatsBpmLabel').textContent = p.bpm;
   renderBeatsGrid();
   send({ type: 'beatsLoadGrid', grid: beatsCurrentGrid, bpm: p.bpm });
+  saveBeatsLiveState();
 }
 
 // ── Grid render ───────────────────────────────────────────────────────────────
@@ -432,6 +349,7 @@ function renderBeatsGrid() {
           beatsCurrentGrid[track][stepIdx] = beatsCurrentGrid[track][stepIdx] ? 0 : 1;
           renderBeatsGrid();
           send({ type: 'beatsLoadGrid', grid: beatsCurrentGrid, bpm: parseInt(document.getElementById('beatsBpmSlider').value) });
+          saveBeatsLiveState();
         });
         group.appendChild(cell);
       }
@@ -534,6 +452,7 @@ document.getElementById('beatsBpmSlider').addEventListener('input', (e) => {
   const val = parseInt(e.target.value);
   document.getElementById('beatsBpmLabel').textContent = val;
   send({ type: 'beatsBpm', value: val });
+  saveBeatsLiveState();
 });
 
 document.getElementById('beatsVolSlider').addEventListener('input', (e) => {

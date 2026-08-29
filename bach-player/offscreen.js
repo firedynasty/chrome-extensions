@@ -206,9 +206,6 @@ function getState(status) {
       currentLoop: t3Timeout ? T3_TOTAL_LOOPS - t3LoopsRemaining + 1 : 0,
       totalLoops: T3_TOTAL_LOOPS
     },
-    metIsPlaying,
-    metBpm,
-    metVolume: Math.round(metVolume * 100),
     beatsIsPlaying,
     beatsBpm,
     beatsVolume: Math.round(beatsVolume * 100),
@@ -220,80 +217,20 @@ function broadcastState(status) {
   chrome.runtime.sendMessage(getState(status)).catch(() => {});
 }
 
+let _lastTimeSave = 0;
 setInterval(() => {
   if (isPlaying) {
     checkChapterBoundary();
     broadcastState();
+    const now = Date.now();
+    if (now - _lastTimeSave > 5000) {
+      _lastTimeSave = now;
+      chrome.storage.local.set({ lastPlayedTime: Math.floor(audio.currentTime) }).catch(() => {});
+    }
   }
 }, 500);
 
 audio.addEventListener('ended', nextTrack);
-
-// ---- Metronome ----
-let metCtx = null, metMaster = null, metNoiseBuf = null;
-let metBpm = 96;
-let metIsPlaying = false;
-let metNextNoteTime = 0;
-let metBeatIdx = 0;
-let metTimer = null;
-let metVolume = 0.5;
-let metPattern = [true, false, false, false]; // accent on beat 1
-
-function ensureMetAudio() {
-  if (metCtx) return;
-  metCtx = new AudioContext();
-  metMaster = metCtx.createGain();
-  metMaster.gain.value = metVolume;
-  metMaster.connect(metCtx.destination);
-}
-
-function playClick(time, accent, beatIdx) {
-  const ctx = metCtx;
-  const osc = ctx.createOscillator();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(accent ? 880 : 660, time);
-  osc.frequency.exponentialRampToValueAtTime(accent ? 440 : 330, time + 0.05);
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(0.0001, time);
-  g.gain.exponentialRampToValueAtTime(accent ? 0.7 : 0.45, time + 0.005);
-  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.08);
-  osc.connect(g).connect(metMaster);
-  osc.start(time);
-  osc.stop(time + 0.1);
-  // Tell the popup to flash the matching beat light in sync with the audio
-  if (beatIdx !== undefined) {
-    const delay = Math.max(0, (time - ctx.currentTime) * 1000);
-    chrome.runtime.sendMessage({ type: 'metBeat', beatIdx, accent, delay }).catch(() => {});
-  }
-}
-
-function metScheduler() {
-  const ctx = metCtx;
-  while (metNextNoteTime < ctx.currentTime + 0.1) {
-    playClick(metNextNoteTime, metPattern[metBeatIdx], metBeatIdx);
-    metNextNoteTime += 60.0 / metBpm;
-    metBeatIdx = (metBeatIdx + 1) % metPattern.length;
-  }
-}
-
-async function metStart() {
-  ensureMetAudio();
-  if (metCtx.state === 'suspended') await metCtx.resume();
-  metBeatIdx = 0;
-  metNextNoteTime = metCtx.currentTime + 0.06;
-  metTimer = setInterval(metScheduler, 25);
-  metIsPlaying = true;
-  broadcastState();
-}
-
-function metStop() {
-  clearInterval(metTimer);
-  metTimer = null;
-  metIsPlaying = false;
-  broadcastState();
-}
-
-let metTaps = [];
 
 // ---- 3-minute repeat timer (ported from vercel_youtube ⏱️ 3m button) ----
 // Plays 3 minutes from the current position, fades out, rewinds, chimes,
@@ -416,36 +353,6 @@ function fadeAudioTo(target, durationMs, gen) {
       }
     }, durationMs / steps);
   });
-}
-
-async function metTapBeat() {
-  ensureMetAudio();
-  if (metCtx.state === 'suspended') await metCtx.resume();
-  const now = metCtx.currentTime;
-
-  metTaps = metTaps.filter(x => now - x < 2.2);
-  metTaps.push(now);
-
-  if (metTaps.length >= 2) {
-    let sum = 0;
-    for (let i = 1; i < metTaps.length; i++) sum += metTaps[i] - metTaps[i - 1];
-    const interval = sum / (metTaps.length - 1);
-    metBpm = Math.min(240, Math.max(40, Math.round(60 / interval)));
-  }
-
-  // Play a click on tap
-  playClick(now + 0.004, (metTaps.length - 1) % 4 === 0);
-
-  // Reset scheduler to sync with tap
-  const interval = 60 / metBpm;
-  metNextNoteTime = now + interval;
-  metBeatIdx = metTaps.length % 4;
-
-  if (!metTimer) {
-    metTimer = setInterval(metScheduler, 25);
-  }
-  metIsPlaying = true;
-  broadcastState();
 }
 
 // ---- Beats Sequencer ----
@@ -585,6 +492,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   } else if (msg.type === 'pause') {
     audio.pause();
     isPlaying = false;
+    chrome.storage.local.set({ lastPlayedTime: Math.floor(audio.currentTime) }).catch(() => {});
     broadcastState();
   } else if (msg.type === 'next') {
     nextTrack();
@@ -619,17 +527,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     broadcastState();
   } else if (msg.type === 'switchAlbum') {
     loadAlbum(msg.index);
-    broadcastState();
-  } else if (msg.type === 'metToggle') {
-    if (metIsPlaying) metStop(); else metStart();
-  } else if (msg.type === 'metTap') {
-    metTapBeat();
-  } else if (msg.type === 'metBpm') {
-    metBpm = msg.value;
-    broadcastState();
-  } else if (msg.type === 'metVolume') {
-    metVolume = msg.value / 100;
-    if (metMaster) metMaster.gain.value = metVolume;
     broadcastState();
   } else if (msg.type === 'beatsToggle') {
     if(beatsIsPlaying) beatsStop(); else beatsStart();

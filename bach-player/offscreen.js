@@ -218,16 +218,10 @@ function broadcastState(status) {
   chrome.runtime.sendMessage(getState(status)).catch(() => {});
 }
 
-let _lastTimeSave = 0;
 setInterval(() => {
   if (isPlaying) {
     checkChapterBoundary();
     broadcastState();
-    const now = Date.now();
-    if (now - _lastTimeSave > 5000) {
-      _lastTimeSave = now;
-      chrome.storage.local.set({ lastPlayedTime: Math.floor(audio.currentTime) }).catch(() => {});
-    }
   }
 }, 500);
 
@@ -493,7 +487,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   } else if (msg.type === 'pause') {
     audio.pause();
     isPlaying = false;
-    chrome.storage.local.set({ lastPlayedTime: Math.floor(audio.currentTime) }).catch(() => {});
     broadcastState();
   } else if (msg.type === 'next') {
     nextTrack();

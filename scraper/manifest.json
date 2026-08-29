@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Dev.to Scraper",
+  "version": "1.0",
+  "description": "On a dev.to article page, click the toolbar icon to download the article as a .md file.",
+  "permissions": ["activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    },
+    "default_title": "Download article as Markdown"
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

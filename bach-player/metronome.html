@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Metronome</title>
+  <style>
+    body {
+      width: 320px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      margin: 0;
+    }
+    h2 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      color: #fff;
+      text-align: center;
+    }
+    button {
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      background: #2c3e50;
+      transition: background 0.2s;
+    }
+    button:hover { background: #34495e; }
+    #metBpmSlider::-webkit-slider-thumb,
+    #metVolSlider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #c9a84c;
+      cursor: pointer;
+    }
+    .met-lights {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .met-light {
+      flex: 1;
+      height: 14px;
+      border-radius: 5px;
+      background: rgba(238, 230, 214, 0.06);
+      border: 1px solid rgba(238, 230, 214, 0.07);
+      transition: background 0.05s, box-shadow 0.05s;
+    }
+    .met-light.on-accent {
+      background: #7fa695;
+      box-shadow: 0 0 10px rgba(127, 166, 149, 0.65);
+    }
+    .met-light.on-tick {
+      background: rgba(127, 166, 149, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <h2>Metronome</h2>
+  <div class="met-lights" id="metLights">
+    <div class="met-light" id="metL0"></div>
+    <div class="met-light" id="metL1"></div>
+    <div class="met-light" id="metL2"></div>
+    <div class="met-light" id="metL3"></div>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+    <span style="font-size:11px; color:#81C784; font-weight:600;">BPM (o,p)</span>
+    <input type="range" id="metBpmSlider" min="40" max="240" value="92" style="flex:1; height:4px; -webkit-appearance:none; background:#16213e; border-radius:2px; outline:none;">
+    <span id="metBpmLabel" style="font-size:12px; color:#c9a84c; min-width:28px; text-align:right;">92</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+    <span style="font-size:11px; color:#81C784; font-weight:600;">Vol</span>
+    <input type="range" id="metVolSlider" min="0" max="100" value="50" style="flex:1; height:4px; -webkit-appearance:none; background:#16213e; border-radius:2px; outline:none;">
+  </div>
+  <div style="display:flex; align-items:center; gap:4px; margin-bottom:6px;">
+    <span style="font-size:11px; color:#81C784; font-weight:600; min-width:28px;">Tempo</span>
+    <button id="metTempoPrev" style="padding:4px 6px; font-size:11px;">[ «</button>
+    <select id="metTempoPreset" style="flex:1; background:#16213e; color:#e0e0e0; border:1px solid rgba(76,175,80,0.4); border-radius:6px; padding:4px 6px; font-size:11px; font-family:inherit; cursor:pointer;">
+      <option value="30">Grave (30)</option>
+      <option value="53">Largo (53)</option>
+      <option value="71">Adagio (71)</option>
+      <option value="92" selected>Andante (92)</option>
+      <option value="114">Moderato (114)</option>
+      <option value="138">Allegro (138)</option>
+      <option value="176">Vivace (176)</option>
+      <option value="192">Presto (192)</option>
+      <option value="220">Prestissimo (220)</option>
+    </select>
+    <button id="metTempoNext" style="padding:4px 6px; font-size:11px;">» ]</button>
+  </div>
+  <div style="display:flex; gap:6px;">
+    <button id="metStartStopBtn" style="flex:1; padding:8px; font-size:14px;">▶ Start (Space)</button>
+    <button id="metTapBtn" style="flex:1; padding:8px; font-size:14px;">🖐 Tap (/)</button>
+  </div>
+
+  <script>
+    const metBpmSlider = document.getElementById('metBpmSlider');
+    const metBpmLabel  = document.getElementById('metBpmLabel');
+    const metVolSlider = document.getElementById('metVolSlider');
+    const metStartStopBtn = document.getElementById('metStartStopBtn');
+    const metTapBtn    = document.getElementById('metTapBtn');
+    const metTempoPreset = document.getElementById('metTempoPreset');
+    const metLights = [
+      document.getElementById('metL0'),
+      document.getElementById('metL1'),
+      document.getElementById('metL2'),
+      document.getElementById('metL3'),
+    ];
+
+    // ---- Audio ----
+    let metCtx = null, metMaster = null;
+    let metBpm = 92;
+    let metIsPlaying = false;
+    let metNextNoteTime = 0;
+    let metBeatIdx = 0;
+    let metTimer = null;
+    let metVolume = 0.5;
+    const metPattern = [true, false, false, false]; // accent on beat 1
+    let metTaps = [];
+
+    function ensureMetAudio() {
+      if (metCtx) return;
+      metCtx = new AudioContext();
+      metMaster = metCtx.createGain();
+      metMaster.gain.value = metVolume;
+      metMaster.connect(metCtx.destination);
+    }
+
+    function playClick(time, accent, beatIdx) {
+      const ctx = metCtx;
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(accent ? 880 : 660, time);
+      osc.frequency.exponentialRampToValueAtTime(accent ? 440 : 330, time + 0.05);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.exponentialRampToValueAtTime(accent ? 0.7 : 0.45, time + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.08);
+      osc.connect(g).connect(metMaster);
+      osc.start(time);
+      osc.stop(time + 0.1);
+      if (beatIdx !== undefined) {
+        const delay = Math.max(0, (time - ctx.currentTime) * 1000);
+        setTimeout(() => flashMetLight(beatIdx, accent), delay);
+      }
+    }
+
+    function metScheduler() {
+      const ctx = metCtx;
+      while (metNextNoteTime < ctx.currentTime + 0.1) {
+        playClick(metNextNoteTime, metPattern[metBeatIdx], metBeatIdx);
+        metNextNoteTime += 60.0 / metBpm;
+        metBeatIdx = (metBeatIdx + 1) % metPattern.length;
+      }
+    }
+
+    async function metStart() {
+      ensureMetAudio();
+      if (metCtx.state === 'suspended') await metCtx.resume();
+      metBeatIdx = 0;
+      metNextNoteTime = metCtx.currentTime + 0.06;
+      metTimer = setInterval(metScheduler, 25);
+      metIsPlaying = true;
+      updateBtn();
+    }
+
+    function metStop() {
+      clearInterval(metTimer);
+      metTimer = null;
+      metIsPlaying = false;
+      clearMetLights();
+      updateBtn();
+    }
+
+    async function metTapBeat() {
+      ensureMetAudio();
+      if (metCtx.state === 'suspended') await metCtx.resume();
+      const now = metCtx.currentTime;
+
+      metTaps = metTaps.filter(x => now - x < 2.2);
+      metTaps.push(now);
+
+      if (metTaps.length >= 2) {
+        let sum = 0;
+        for (let i = 1; i < metTaps.length; i++) sum += metTaps[i] - metTaps[i - 1];
+        const interval = sum / (metTaps.length - 1);
+        metBpm = Math.min(240, Math.max(40, Math.round(60 / interval)));
+        metBpmSlider.value = metBpm;
+        metBpmLabel.textContent = metBpm;
+      }
+
+      playClick(now + 0.004, (metTaps.length - 1) % 4 === 0);
+
+      const interval = 60 / metBpm;
+      metNextNoteTime = now + interval;
+      metBeatIdx = metTaps.length % 4;
+
+      if (!metTimer) metTimer = setInterval(metScheduler, 25);
+      metIsPlaying = true;
+      updateBtn();
+    }
+
+    // ---- Lights ----
+    function flashMetLight(beatIdx, accent) {
+      metLights.forEach(l => l.classList.remove('on-accent', 'on-tick'));
+      const light = metLights[beatIdx];
+      if (light) {
+        light.classList.add(accent ? 'on-accent' : 'on-tick');
+        setTimeout(() => light.classList.remove('on-accent', 'on-tick'), 120);
+      }
+    }
+
+    function clearMetLights() {
+      metLights.forEach(l => l.classList.remove('on-accent', 'on-tick'));
+    }
+
+    // ---- UI sync ----
+    function updateBtn() {
+      metStartStopBtn.innerHTML = metIsPlaying ? '⏸ Stop (Space)' : '▶ Start (Space)';
+      metStartStopBtn.style.background = metIsPlaying ? '#c9a84c' : '#2c3e50';
+      metStartStopBtn.style.color = metIsPlaying ? '#1a1a2e' : '#fff';
+    }
+
+    // ---- Tempo preset helpers ----
+    function applyTempoPreset() {
+      const val = parseInt(metTempoPreset.value);
+      if (val) {
+        metBpm = val;
+        metBpmSlider.value = val;
+        metBpmLabel.textContent = val;
+      }
+    }
+
+    // ---- Event listeners ----
+    metBpmSlider.addEventListener('input', () => {
+      metBpm = parseInt(metBpmSlider.value);
+      metBpmLabel.textContent = metBpm;
+    });
+
+    metVolSlider.addEventListener('input', () => {
+      metVolume = parseInt(metVolSlider.value) / 100;
+      if (metMaster) metMaster.gain.value = metVolume;
+    });
+
+    metStartStopBtn.addEventListener('click', () => {
+      if (metIsPlaying) metStop(); else metStart();
+    });
+
+    metTapBtn.addEventListener('click', metTapBeat);
+
+    metTempoPreset.addEventListener('change', applyTempoPreset);
+
+    document.getElementById('metTempoPrev').addEventListener('click', () => {
+      const idx = metTempoPreset.selectedIndex;
+      if (idx > 0) metTempoPreset.selectedIndex = idx - 1;
+      applyTempoPreset();
+    });
+
+    document.getElementById('metTempoNext').addEventListener('click', () => {
+      const idx = metTempoPreset.selectedIndex;
+      if (idx < metTempoPreset.options.length - 1) metTempoPreset.selectedIndex = idx + 1;
+      applyTempoPreset();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (metIsPlaying) metStop(); else metStart();
+      } else if (e.key === '[') {
+        document.getElementById('metTempoPrev').click();
+      } else if (e.key === ']') {
+        document.getElementById('metTempoNext').click();
+      } else if (e.key === 'o') {
+        metBpm = Math.max(40, metBpm - 2);
+        metBpmSlider.value = metBpm;
+        metBpmLabel.textContent = metBpm;
+      } else if (e.key === 'p') {
+        metBpm = Math.min(240, metBpm + 2);
+        metBpmSlider.value = metBpm;
+        metBpmLabel.textContent = metBpm;
+      } else if (e.key === '/') {
+        e.preventDefault();
+        metTapBeat();
+      }
+    });
+  </script>
+</body>
+</html>

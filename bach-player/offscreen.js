@@ -233,11 +233,11 @@ setInterval(() => {
 
 audio.addEventListener('ended', nextTrack);
 
-// ---- 3-minute repeat timer (ported from vercel_youtube ⏱️ 3m button) ----
-// Plays 3 minutes from the current position, fades out, rewinds, chimes,
-// and repeats 8 times (3m x 8 = 24 minutes). Click again to cancel.
-const T3_DURATION_MS = 180000;
-const T3_TOTAL_LOOPS = 8;
+// ---- 30-second repeat timer ----
+// Plays 30 seconds from the current position, fades out, rewinds,
+// and repeats 10 times. Click again to cancel.
+const T3_DURATION_MS = 30000;
+const T3_TOTAL_LOOPS = 10;
 const T3_FADE_MS = 2000;
 let t3Timeout = null;
 let t3LoopsRemaining = 0;
@@ -248,7 +248,7 @@ let t3Generation = 0;   // bumped on cancel so in-flight async fades abort
 
 function toggle3minTimer() {
   if (t3Timeout) {
-    cancel3minTimer('3m timer cancelled');
+    cancel3minTimer('30s timer cancelled');
   } else {
     start3minTimer();
   }
@@ -269,7 +269,7 @@ function start3minTimer() {
 
 function run3minLoop() {
   const currentLoop = T3_TOTAL_LOOPS - t3LoopsRemaining + 1;
-  broadcastState(`3m repeat: loop ${currentLoop}/${T3_TOTAL_LOOPS}`);
+  broadcastState(`30s repeat: loop ${currentLoop}/${T3_TOTAL_LOOPS}`);
 
   t3Timeout = setTimeout(async () => {
     const gen = t3Generation;
@@ -294,7 +294,7 @@ function run3minLoop() {
       audio.volume = t3FadeVol;
       t3FadeVol = null;
       t3Timeout = null;
-      broadcastState(`3m repeat complete (${T3_TOTAL_LOOPS}/${T3_TOTAL_LOOPS})`);
+      broadcastState(`30s repeat complete (${T3_TOTAL_LOOPS}/${T3_TOTAL_LOOPS})`);
     }
   }, T3_DURATION_MS - T3_FADE_MS);
 }

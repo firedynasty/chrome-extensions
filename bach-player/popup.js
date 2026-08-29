@@ -78,7 +78,7 @@ function applyState(state) {
     timer3minBtn.textContent = `⏹️ ${state.timer3min.currentLoop}/${state.timer3min.totalLoops}`;
     timer3minBtn.style.background = 'linear-gradient(45deg, #FF5722, #E64A19)';
   } else {
-    timer3minBtn.textContent = '⏱️ 3m';
+    timer3minBtn.textContent = '⏱️ 30s';
     timer3minBtn.style.background = 'linear-gradient(45deg,#ff9800,#f57c00)';
   }
 

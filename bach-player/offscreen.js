@@ -20,7 +20,7 @@ let noiseCtx = null;
 let noiseGain = null;
 let noiseSource = null;
 let whiteNoiseActive = false;
-let noiseVolume = 0.1;
+let noiseVolume = 0.01;
 
 function initWhiteNoise() {
   if (noiseCtx) return;

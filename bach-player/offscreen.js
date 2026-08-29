@@ -20,6 +20,7 @@ let noiseCtx = null;
 let noiseGain = null;
 let noiseSource = null;
 let whiteNoiseActive = false;
+let noiseVolume = 0.1;
 
 function initWhiteNoise() {
   if (noiseCtx) return;
@@ -37,16 +38,15 @@ function initWhiteNoise() {
   noiseSource.start();
 }
 
-function setNoiseVolume(vol) {
-  // White noise at ~10% of music volume so it sits in background
-  if (noiseGain) noiseGain.gain.value = whiteNoiseActive ? vol * 0.1 : 0;
+function setNoiseVolume() {
+  if (noiseGain) noiseGain.gain.value = whiteNoiseActive ? noiseVolume : 0;
 }
 
 function toggleWhiteNoise() {
   initWhiteNoise();
   if (noiseCtx.state === 'suspended') noiseCtx.resume();
   whiteNoiseActive = !whiteNoiseActive;
-  setNoiseVolume(audio.volume);
+  setNoiseVolume();
 }
 
 // Load playlists.json on startup
@@ -201,6 +201,7 @@ function getState(status) {
     youtubeId: currentIndex >= 0 && tracks[currentIndex] ? tracks[currentIndex].youtubeId || null : null,
     tracks: tracks.map(t => t.title),
     whiteNoise: whiteNoiseActive,
+    noiseVolume: Math.round(noiseVolume * 100),
     timer3min: {
       active: t3Timeout !== null,
       currentLoop: t3Timeout ? T3_TOTAL_LOOPS - t3LoopsRemaining + 1 : 0,
@@ -505,10 +506,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   } else if (msg.type === 'toggleNoise') {
     toggleWhiteNoise();
     broadcastState();
+  } else if (msg.type === 'noiseVolume') {
+    noiseVolume = msg.value / 100;
+    setNoiseVolume();
+    broadcastState();
   } else if (msg.type === 'volume') {
     audio.volume = msg.value / 100;
     if (t3FadeVol !== null) t3FadeVol = audio.volume;
-    setNoiseVolume(audio.volume);
     broadcastState();
   } else if (msg.type === 'rate') {
     playbackRate = msg.value;

@@ -3,6 +3,8 @@ const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const shuffleBtn = document.getElementById('shuffleBtn');
 const noiseBtn = document.getElementById('noiseBtn');
+const noiseVolLabel = document.getElementById('noiseVolLabel');
+let noiseVolPct = 10;
 const volumeSlider = document.getElementById('volume');
 const trackTitle = document.getElementById('trackTitle');
 const progressBar = document.getElementById('progress-bar');
@@ -58,6 +60,11 @@ function applyState(state) {
   } else {
     noiseBtn.style.background = '#2c3e50';
     noiseBtn.style.color = '#fff';
+  }
+
+  if (state.noiseVolume !== undefined) {
+    noiseVolPct = state.noiseVolume;
+    noiseVolLabel.textContent = state.noiseVolume + '%';
   }
 
   volumeSlider.value = state.volume;
@@ -171,6 +178,14 @@ nextBtn.addEventListener('click', () => send({ type: 'next' }));
 prevBtn.addEventListener('click', () => send({ type: 'prev' }));
 shuffleBtn.addEventListener('click', () => send({ type: 'shuffle' }));
 noiseBtn.addEventListener('click', () => send({ type: 'toggleNoise' }));
+
+function adjustNoiseVol(delta) {
+  noiseVolPct = Math.min(100, Math.max(0, noiseVolPct + delta));
+  noiseVolLabel.textContent = noiseVolPct + '%';
+  send({ type: 'noiseVolume', value: noiseVolPct });
+}
+document.getElementById('noiseVolDown').addEventListener('click', () => adjustNoiseVol(-1));
+document.getElementById('noiseVolUp').addEventListener('click', () => adjustNoiseVol(1));
 volumeSlider.addEventListener('input', () => {
   send({ type: 'volume', value: parseInt(volumeSlider.value) });
 });

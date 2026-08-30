@@ -6,7 +6,7 @@
 // PURE ASCII string literals: non-ASCII display chars use String.fromCharCode /
 // String.fromCodePoint so page charset misdetection can never mangle them.
 (function () {
-  const VERSION  = 9;
+  const VERSION  = 10;
   const TIP_ID   = '__wdf_tip';
   const BAR_ID   = '__wdf_bar';
 
@@ -29,11 +29,14 @@
   // ---- tooltip ----
 
   let statusTimer = null;
+  let tipInputEl = null;
+  let wantTipFocus = false;
 
   function removeTooltip() {
     if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
     const el = document.getElementById(TIP_ID);
     if (el) el.remove();
+    tipInputEl = null;
   }
 
   function placeTooltip(tip, cx, cy) {
@@ -85,6 +88,7 @@
   }
 
   function showStatus(cx, cy, msg) {
+    wantTipFocus = false;
     const tip = makeBaseTooltip();
     tip.style.color = '#888';
     tip.style.fontSize = '12px';
@@ -176,8 +180,42 @@
       tip.appendChild(synRow);
     }
 
+    // manual lookup input: type a word, Enter redefines in place
+    const tipInput = document.createElement('input');
+    tipInput.type = 'text';
+    tipInput.placeholder = 'Look up another word...';
+    tipInput.style.cssText = [
+      'display:block',
+      'width:100%',
+      'box-sizing:border-box',
+      'margin-top:10px',
+      'background:#0f0f1e',
+      'border:1px solid #444',
+      'border-radius:6px',
+      'color:#e0e0e0',
+      'font-size:12px',
+      'padding:5px 8px',
+      'outline:none'
+    ].join(';');
+    tipInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const word = tipInput.value.trim().replace(/^[^a-zA-Z]+|[^a-zA-Z']+$/g, '').toLowerCase();
+        if (!word || word.length < 2) return;
+        // Re-anchor the next tooltip where this one currently sits
+        const rect = tip.getBoundingClientRect();
+        wantTipFocus = true;
+        doLookup(word, rect.left - 14, rect.top - 14);
+      }
+      e.stopPropagation();
+    });
+    tipInputEl = tipInput;
+    tip.appendChild(tipInput);
+
     addCloseBtn(tip);
     placeTooltip(tip, cx, cy);
+    if (wantTipFocus) tipInput.focus();
+    wantTipFocus = false;
   }
 
   // ---- lookup ----

@@ -3,8 +3,17 @@
 // (no inline handlers, no <style> tags) and PURE ASCII: every non-ASCII
 // display char is built with String.fromCharCode / String.fromCodePoint
 // so the page's charset can never mangle it.
+//
+// Transcript sources (in priority order):
+//   1. Downloaded transcript: transcripts/<videoId>.json inside the extension
+//      folder (written by yt_notes.py / the `ytnotes` shell function) —
+//      rendered in the panel; click a line to collect it with a markdown
+//      timestamp link: [H:MM:SS](https://www.youtube.com/watch?v=ID&t=Ns) text
+//   2. YouTube's own transcript panel (fallback) — clicks are intercepted
+//      so collecting a line doesn't seek the video.
+// Typed notes are stamped with the video's current playback time.
 (function () {
-  const VERSION = 5;
+  const VERSION = 7;
   const PANEL_ID = '__ytn_panel';
 
   // Non-ASCII display chars, charset-proof
@@ -28,10 +37,40 @@
     return;
   }
 
-  const state = { buffer: [], active: true, pollTimer: null };
+  const state = {
+    buffer: [],
+    active: true,
+    pollTimer: null,
+    vid: null,          // current YouTube video ID (null if not a watch page)
+    transcript: null,   // downloaded transcript [{start, text}] if available
+    txRows: [],         // rendered transcript row elements
+    collected: {},      // transcript indices already collected
+    curSegIdx: -1,      // follow-along highlight position
+    timeHandler: null   // video timeupdate listener
+  };
 
   function hasSegments() {
     return !!document.querySelector(SEG_SEL);
+  }
+
+  // ---- video / timestamp helpers ----
+
+  function getVideoId() {
+    const m = location.href.match(/[?&]v=([\w-]{6,})/) || location.href.match(/youtu\.be\/([\w-]{6,})/);
+    return m ? m[1] : null;
+  }
+
+  function hms(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  // Markdown timestamp link, the plain-link form Obsidian renders clickable.
+  function tsLink(sec) {
+    return '[' + hms(sec) + '](https://www.youtube.com/watch?v=' + state.vid + '&t=' + Math.floor(sec) + 's)';
   }
 
   // ---- clipboard ----
@@ -64,6 +103,16 @@
     flashPanel();
   }
 
+  // Typed notes get stamped with the video's current playback position
+  // so the note links back to the moment you wrote it.
+  function addTypedNote(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    const v = document.querySelector('video');
+    if (v && state.vid) text = text + ' ' + tsLink(v.currentTime);
+    addLine(text);
+  }
+
   // Intercept clicks on YouTube's own transcript segments (capture phase,
   // before YouTube's handlers) so collecting a line doesn't seek the video.
   function onDocClick(e) {
@@ -82,7 +131,7 @@
 
   // ---- panel UI ----
 
-  let panel, listEl, statusEl, countEl, inputEl;
+  let panel, listEl, statusEl, countEl, inputEl, txView;
 
   function setStatus(msg, isErr) {
     if (!statusEl) return;
@@ -118,6 +167,131 @@
     });
     // keep the newest chip visible
     listEl.scrollTop = listEl.scrollHeight;
+  }
+
+  // ---- downloaded transcript view ----
+
+  const SENT_END = /[.?!]["')\]]?$/;
+
+  // Sentence boundaries around segment i: expand back/forward to the
+  // nearest segments whose text ends with sentence punctuation.
+  function sentenceBounds(i) {
+    const T = state.transcript;
+    let s = i, e = i;
+    while (s > 0 && !SENT_END.test(T[s - 1].text.trim())) s--;
+    while (e < T.length - 1 && !SENT_END.test(T[e].text.trim())) e++;
+    return [s, e];
+  }
+
+  // Click collects the clicked sentence plus the sentence before and after,
+  // so a note never starts or ends mid-thought. Each sentence keeps its own
+  // timestamp link.
+  function collectWithContext(idx) {
+    const T = state.transcript;
+    const parts = [];
+    const markFrom = { lo: idx, hi: idx };
+    const pushSentence = function (a, b) {
+      if (a < 0 || b >= T.length || a > b) return;
+      parts.push(tsLink(T[a].start) + ' ' + T.slice(a, b + 1).map(function (x) { return x.text; }).join(' '));
+      if (a < markFrom.lo) markFrom.lo = a;
+      if (b > markFrom.hi) markFrom.hi = b;
+    };
+    const sb = sentenceBounds(idx);
+    if (sb[0] > 0) {
+      const pb = sentenceBounds(sb[0] - 1);
+      pushSentence(pb[0], pb[1]);
+    }
+    pushSentence(sb[0], sb[1]);
+    if (sb[1] < T.length - 1) {
+      const nb = sentenceBounds(sb[1] + 1);
+      pushSentence(nb[0], nb[1]);
+    }
+    addLine(parts.join(' '));
+    for (let k = markFrom.lo; k <= markFrom.hi; k++) {
+      state.collected[k] = true;
+      if (k !== state.curSegIdx && state.txRows[k]) state.txRows[k].style.background = '#1f2f1f';
+    }
+  }
+
+  // Follow-along: highlight the row matching the video's current time.
+  function onTimeUpdate() {
+    if (!state.transcript || !txView) return;
+    const v = document.querySelector('video');
+    if (!v) return;
+    const t = v.currentTime;
+    let idx = -1;
+    for (let i = 0; i < state.transcript.length; i++) {
+      if (state.transcript[i].start <= t) idx = i;
+      else break;
+    }
+    if (idx === state.curSegIdx) return;
+    const prev = state.txRows[state.curSegIdx];
+    if (prev) prev.style.background = state.collected[state.curSegIdx] ? '#1f2f1f' : '';
+    state.curSegIdx = idx;
+    const row = state.txRows[idx];
+    if (row) {
+      row.style.background = '#2a2a44';
+      txView.scrollTop = Math.max(0, row.offsetTop - txView.clientHeight / 3);
+    }
+  }
+
+  function renderTranscript() {
+    if (!txView || !state.transcript) return;
+    txView.innerHTML = '';
+    state.txRows = [];
+    state.transcript.forEach(function (seg, i) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; gap:6px; padding:3px 8px; cursor:pointer; font-size:12px; line-height:1.4; border-radius:4px;';
+      row.title = 'Click to collect this sentence plus the one before and after, with timestamp links';
+
+      const chip = document.createElement('span');
+      chip.style.cssText = 'color:#7ec8e3; font-family:monospace; font-size:11px; flex-shrink:0; padding-top:1px;';
+      chip.textContent = hms(seg.start);
+
+      const text = document.createElement('span');
+      text.style.cssText = 'color:#d4d4d4;';
+      text.textContent = seg.text;
+
+      row.appendChild(chip);
+      row.appendChild(text);
+      row.addEventListener('click', function () { collectWithContext(i); });
+      txView.appendChild(row);
+      state.txRows.push(row);
+    });
+    txView.style.display = '';
+    const v = document.querySelector('video');
+    if (v) {
+      state.timeHandler = onTimeUpdate;
+      v.addEventListener('timeupdate', state.timeHandler);
+    }
+  }
+
+  // Fetch transcripts/<videoId>.json from inside the extension folder.
+  // Unpacked extensions read from disk per fetch, so newly downloaded
+  // transcripts are picked up without reloading the extension.
+  function loadLocalTranscript() {
+    state.vid = getVideoId();
+    if (!state.vid || !chrome.runtime || !chrome.runtime.getURL) {
+      ensureTranscript();
+      return;
+    }
+    setStatus('looking for downloaded transcript...');
+    fetch(chrome.runtime.getURL('transcripts/' + state.vid + '.json'))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!state.active) return;
+        if (Array.isArray(data) && data.length) {
+          state.transcript = data;
+          renderTranscript();
+          setStatus('downloaded transcript ' + MDOT + ' ' + data.length + ' lines ' + MDOT + ' click to collect');
+        } else {
+          setStatus('no downloaded transcript for this video ' + EM + ' run: ytnotes <url>', true);
+          ensureTranscript();
+        }
+      })
+      .catch(function () {
+        if (state.active) ensureTranscript();
+      });
   }
 
   function buildPanel() {
@@ -182,9 +356,13 @@
     head.appendChild(clearBtn);
     head.appendChild(closeBtn);
 
+    // downloaded-transcript view (hidden until a transcript JSON loads)
+    txView = document.createElement('div');
+    txView.style.cssText = 'flex:1; overflow-y:auto; min-height:60px; max-height:38vh; padding:4px 2px; border-bottom:1px solid #333; display:none;';
+
     // collected lines (compact chips)
     listEl = document.createElement('div');
-    listEl.style.cssText = 'flex:1; overflow-y:auto; min-height:30px; max-height:30vh; display:flex; flex-wrap:wrap; gap:4px; align-content:flex-start; padding:6px 8px;';
+    listEl.style.cssText = 'overflow-y:auto; min-height:30px; max-height:30vh; display:flex; flex-wrap:wrap; gap:4px; align-content:flex-start; padding:6px 8px;';
 
     // typed-note input row
     const inputRow = document.createElement('div');
@@ -199,7 +377,7 @@
         e.preventDefault();
         const v = inputEl.value;
         inputEl.value = '';
-        addLine(v);
+        addTypedNote(v);
       } else if (e.key === 'Escape') {
         inputEl.blur();
       }
@@ -212,7 +390,7 @@
     addBtn.addEventListener('click', function () {
       const v = inputEl.value;
       inputEl.value = '';
-      addLine(v);
+      addTypedNote(v);
       inputEl.focus();
     });
 
@@ -225,15 +403,17 @@
     statusEl.textContent = 'starting...';
 
     panel.appendChild(head);
+    panel.appendChild(txView);
     panel.appendChild(listEl);
     panel.appendChild(inputRow);
     panel.appendChild(statusEl);
     document.body.appendChild(panel);
   }
 
-  // ---- transcript auto-open ----
+  // ---- transcript auto-open (YouTube's own panel, fallback) ----
 
   function ensureTranscript() {
+    if (state.transcript) return; // downloaded transcript already showing
     if (hasSegments()) {
       setStatus('transcript ready ' + MDOT + ' click lines to collect');
       return;
@@ -260,6 +440,7 @@
 
   function pollForSegments(n) {
     if (!state.active) return;
+    if (state.transcript) return;
     if (hasSegments()) {
       setStatus('transcript ready ' + MDOT + ' click lines to collect');
       return;
@@ -276,10 +457,16 @@
   function deactivate() {
     state.active = false;
     if (state.pollTimer) { clearTimeout(state.pollTimer); state.pollTimer = null; }
+    if (state.timeHandler) {
+      const v = document.querySelector('video');
+      if (v) v.removeEventListener('timeupdate', state.timeHandler);
+      state.timeHandler = null;
+    }
     document.removeEventListener('click', onDocClick, true);
     const p = document.getElementById(PANEL_ID);
     if (p) p.remove();
     panel = null;
+    txView = null;
     if (window.__ytn && window.__ytn.state === state) window.__ytn = null;
   }
 
@@ -287,5 +474,5 @@
   renderList();
   document.addEventListener('click', onDocClick, true);
   window.__ytn = { version: VERSION, deactivate: deactivate, state: state };
-  ensureTranscript();
+  loadLocalTranscript();
 })();

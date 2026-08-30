@@ -4,6 +4,10 @@
   "version": "1.0",
   "description": "Click lines in YouTube's own transcript to append them to a running clipboard list, with a floating dialog to review, delete, and add your own typed notes.",
   "permissions": ["activeTab", "scripting"],
+  "web_accessible_resources": [{
+    "resources": ["transcripts/*"],
+    "matches": ["https://www.youtube.com/*", "https://youtu.be/*"]
+  }],
   "background": {
     "service_worker": "background.js"
   },

@@ -30,6 +30,9 @@ Lazy note-taking on YouTube watch pages. No popup — the toolbar icon toggles c
 ### copy-text-tooltip
 Select any text on a page and a tooltip appears beside it with a one-click Copy button (snippet preview + char count, `navigator.clipboard` with `execCommand` fallback). Toolbar-icon toggle via `action.onClicked`, no popup. A floating ON/OFF chip (bottom-right) shows state — click to pause/resume, its `x` to deactivate. `mousedown` capture-phase handler closes the tooltip on outside press; presses inside are guarded and shielded from the page (`stopPropagation`, plus `preventDefault` on mousedown so the selection survives until Copy is clicked). Version-stamped singleton (`window.__ctx`).
 
+### transcript-notes (Paste, Click, Collect)
+Source-agnostic note-taking from any pasted transcript (Coursera, lectures, talks). Toolbar-icon toggle, no popup. Paste via a textarea or direct `navigator.clipboard.readText()` (with manual-paste fallback when blocked); text is split into sentences (`.?!` boundaries, line-split fallback for punctuation-less caption dumps) with `[MUSIC]`/`[APPLAUSE]`-style noise markers stripped. Rows toggle-collect on click (green), typed notes append via an input row. Export = all entries in insertion order (sentences and typed notes interleaved as collected), blank-line separated, via clipboard copy or a Blob-URL `.txt` download. Version-stamped singleton (`window.__tnx`).
+
 ## Conventions
 
 - All extensions use Manifest V3 with minimal permissions (`activeTab` + `scripting`)

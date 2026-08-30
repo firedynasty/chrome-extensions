@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Transcript Notes — Paste, Click, Collect",
+  "version": "1.0",
+  "description": "Paste any transcript (Coursera, lectures, talks), click the sentences worth keeping, add your own notes, and export to clipboard or a .txt file.",
+  "permissions": ["activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

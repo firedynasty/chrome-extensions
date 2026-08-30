@@ -13,7 +13,7 @@
 //      so collecting a line doesn't seek the video.
 // Typed notes are stamped with the video's current playback time.
 (function () {
-  const VERSION = 7;
+  const VERSION = 10;
   const PANEL_ID = '__ytn_panel';
 
   // Non-ASCII display chars, charset-proof
@@ -46,8 +46,14 @@
     txRows: [],         // rendered transcript row elements
     collected: {},      // transcript indices already collected
     curSegIdx: -1,      // follow-along highlight position
-    timeHandler: null   // video timeupdate listener
+    timeHandler: null,  // video timeupdate listener
+    ctxChars: 200       // before/after context char cap (clicked sentence gets 2x)
   };
+
+  try {
+    const savedCtx = parseInt(localStorage.getItem('ytnCtxChars'), 10);
+    if (savedCtx >= 50 && savedCtx <= 600) state.ctxChars = savedCtx;
+  } catch (e) {}
 
   function hasSegments() {
     return !!document.querySelector(SEG_SEL);
@@ -131,7 +137,7 @@
 
   // ---- panel UI ----
 
-  let panel, listEl, statusEl, countEl, inputEl, txView;
+  let panel, listEl, statusEl, countEl, inputEl, txView, txBar, ctxVal;
 
   function setStatus(msg, isErr) {
     if (!statusEl) return;
@@ -173,6 +179,45 @@
 
   const SENT_END = /[.?!]["')\]]?$/;
 
+  // Run-on-caption caps (fast talkers = few periods = giant "sentences"):
+  // keep at most state.ctxChars of the sentence before/after (the part
+  // nearest the click) and 2x that for a run-on clicked sentence.
+  // Adjustable live via the ctx +/- control above the transcript.
+
+  function trimTail(text, n) { // keep the END of a long before-sentence
+    if (text.length <= n) return text;
+    const cut = text.slice(text.length - n);
+    const sp = cut.indexOf(' ');
+    return '...' + (sp === -1 ? cut : cut.slice(sp + 1));
+  }
+
+  function trimHead(text, n) { // keep the START of a long after-sentence
+    if (text.length <= n) return text;
+    const cut = text.slice(0, n);
+    const sp = cut.lastIndexOf(' ');
+    return (sp === -1 ? cut : cut.slice(0, sp)) + '...';
+  }
+
+  function trimAround(text, n, anchor) { // keep the part around the clicked segment
+    if (text.length <= n) return text;
+    const at = Math.max(0, text.indexOf(anchor));
+    let start = Math.max(0, at - Math.floor(n / 2));
+    let end = Math.min(text.length, start + n);
+    start = Math.max(0, end - n);
+    let out = text.slice(start, end);
+    if (start > 0) {
+      const sp = out.indexOf(' ');
+      if (sp !== -1) out = out.slice(sp + 1);
+      out = '...' + out;
+    }
+    if (end < text.length) {
+      const sp = out.lastIndexOf(' ');
+      if (sp !== -1) out = out.slice(0, sp);
+      out = out + '...';
+    }
+    return out;
+  }
+
   // Sentence boundaries around segment i: expand back/forward to the
   // nearest segments whose text ends with sentence punctuation.
   function sentenceBounds(i) {
@@ -186,31 +231,61 @@
   // Click collects the clicked sentence plus the sentence before and after,
   // so a note never starts or ends mid-thought. Each sentence keeps its own
   // timestamp link.
+  // Char-budget segment walks: which rows actually survived the cap.
+  // Used so the green highlight covers ~what was copied, not the whole
+  // sentence range (which in run-on captions paints dozens of rows).
+  function walkBack(j, n, floor) { // lowest index fitting in budget ending at j
+    const T = state.transcript;
+    let len = T[j].text.length, k = j;
+    while (k > floor && len < n) {
+      k--;
+      len += T[k].text.length + 1;
+    }
+    return k;
+  }
+
+  function walkFwd(j, n, ceil) { // highest index fitting in budget starting at j
+    const T = state.transcript;
+    let len = T[j].text.length, k = j;
+    while (k < ceil && len < n) {
+      k++;
+      len += T[k].text.length + 1;
+    }
+    return k;
+  }
+
   function collectWithContext(idx) {
     const T = state.transcript;
     const parts = [];
-    const markFrom = { lo: idx, hi: idx };
-    const pushSentence = function (a, b) {
+    const marks = [];
+    const sentText = function (a, b) {
+      return T.slice(a, b + 1).map(function (x) { return x.text; }).join(' ');
+    };
+    const push = function (a, b, text, markLo, markHi) {
       if (a < 0 || b >= T.length || a > b) return;
-      parts.push(tsLink(T[a].start) + ' ' + T.slice(a, b + 1).map(function (x) { return x.text; }).join(' '));
-      if (a < markFrom.lo) markFrom.lo = a;
-      if (b > markFrom.hi) markFrom.hi = b;
+      parts.push(tsLink(T[a].start) + ' ' + text);
+      marks.push([markLo, markHi]);
     };
     const sb = sentenceBounds(idx);
     if (sb[0] > 0) {
       const pb = sentenceBounds(sb[0] - 1);
-      pushSentence(pb[0], pb[1]);
+      push(pb[0], pb[1], trimTail(sentText(pb[0], pb[1]), state.ctxChars),
+        walkBack(pb[1], state.ctxChars, pb[0]), pb[1]);
     }
-    pushSentence(sb[0], sb[1]);
+    push(sb[0], sb[1], trimAround(sentText(sb[0], sb[1]), state.ctxChars * 2, T[idx].text),
+      walkBack(idx, state.ctxChars, sb[0]), walkFwd(idx, state.ctxChars, sb[1]));
     if (sb[1] < T.length - 1) {
       const nb = sentenceBounds(sb[1] + 1);
-      pushSentence(nb[0], nb[1]);
+      push(nb[0], nb[1], trimHead(sentText(nb[0], nb[1]), state.ctxChars),
+        nb[0], walkFwd(nb[0], state.ctxChars, nb[1]));
     }
     addLine(parts.join(' '));
-    for (let k = markFrom.lo; k <= markFrom.hi; k++) {
-      state.collected[k] = true;
-      if (k !== state.curSegIdx && state.txRows[k]) state.txRows[k].style.background = '#1f2f1f';
-    }
+    marks.forEach(function (range) {
+      for (let k = range[0]; k <= range[1]; k++) {
+        state.collected[k] = true;
+        if (k !== state.curSegIdx && state.txRows[k]) state.txRows[k].style.background = '#1f2f1f';
+      }
+    });
   }
 
   // Follow-along: highlight the row matching the video's current time.
@@ -259,6 +334,7 @@
       state.txRows.push(row);
     });
     txView.style.display = '';
+    if (txBar) txBar.style.display = 'flex';
     const v = document.querySelector('video');
     if (v) {
       state.timeHandler = onTimeUpdate;
@@ -326,6 +402,10 @@
         : Promise.reject(new Error('no clipboard api'));
       write.then(function () {
         state.buffer = [];
+        state.collected = {};
+        state.txRows.forEach(function (row, k) {
+          if (row && k !== state.curSegIdx) row.style.background = '';
+        });
         renderList();
         setStatus(CHECK + ' ' + n + ' line(s) copied ' + EM + ' list cleared');
       }).catch(function () {
@@ -339,6 +419,10 @@
     clearBtn.title = 'Remove all collected lines';
     clearBtn.addEventListener('click', function () {
       state.buffer = [];
+      state.collected = {};
+      state.txRows.forEach(function (row, k) {
+        if (row && k !== state.curSegIdx) row.style.background = '';
+      });
       renderList();
       copyBuffer('cleared');
     });
@@ -359,6 +443,31 @@
     // downloaded-transcript view (hidden until a transcript JSON loads)
     txView = document.createElement('div');
     txView.style.cssText = 'flex:1; overflow-y:auto; min-height:60px; max-height:38vh; padding:4px 2px; border-bottom:1px solid #333; display:none;';
+
+    // ctx bar: live char-cap control for click context (before/after)
+    txBar = document.createElement('div');
+    txBar.style.cssText = 'display:none; align-items:center; gap:6px; padding:3px 10px; background:#16162a; border-bottom:1px solid #333; font-size:11px; color:#888;';
+    const ctxLabel = document.createElement('span');
+    ctxLabel.textContent = 'ctx';
+    ctxLabel.title = 'Characters of context collected around a click (sentence before/after; the clicked sentence gets double)';
+    ctxVal = document.createElement('span');
+    ctxVal.style.cssText = 'color:#7ec8e3; font-weight:700; min-width:30px; text-align:center;';
+    ctxVal.textContent = String(state.ctxChars);
+    const mkCtxBtn = function (label, delta) {
+      const b = document.createElement('button');
+      b.style.cssText = 'background:#37474F; color:#fff; border:none; border-radius:4px; font-size:11px; font-weight:700; padding:1px 8px; cursor:pointer;';
+      b.textContent = label;
+      b.addEventListener('click', function () {
+        state.ctxChars = Math.min(600, Math.max(50, state.ctxChars + delta));
+        ctxVal.textContent = String(state.ctxChars);
+        try { localStorage.setItem('ytnCtxChars', String(state.ctxChars)); } catch (e) {}
+      });
+      return b;
+    };
+    txBar.appendChild(ctxLabel);
+    txBar.appendChild(mkCtxBtn('-', -50));
+    txBar.appendChild(ctxVal);
+    txBar.appendChild(mkCtxBtn('+', 50));
 
     // collected lines (compact chips)
     listEl = document.createElement('div');
@@ -403,6 +512,7 @@
     statusEl.textContent = 'starting...';
 
     panel.appendChild(head);
+    panel.appendChild(txBar);
     panel.appendChild(txView);
     panel.appendChild(listEl);
     panel.appendChild(inputRow);
@@ -467,6 +577,7 @@
     if (p) p.remove();
     panel = null;
     txView = null;
+    txBar = null;
     if (window.__ytn && window.__ytn.state === state) window.__ytn = null;
   }
 

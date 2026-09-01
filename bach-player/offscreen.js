@@ -5,15 +5,21 @@ let currentEntries = [];
 let currentAlbumIndex = -1;
 let tracks = []; // flattened track list for current album
 
-const audio = new Audio();
+// YouTube player state (postMessage-based, no external script)
+let ytFrame = null;
+let playerReady = false;
+let pendingPlayOnReady = false; // true when we need to call playVideo after onReady
+let currentVideoId = null;
+let currentTime = 0;
+let duration = 0;
+let volume = 80; // 0-100
+
 let currentIndex = -1;
 let isPlaying = false;
 let shuffleOrder = [];
 let shufflePos = -1;
 let shuffleMode = false;
 let playbackRate = 1;
-
-audio.volume = 0.8;
 
 // White noise via Web Audio API
 let noiseCtx = null;
@@ -49,15 +55,103 @@ function toggleWhiteNoise() {
   setNoiseVolume();
 }
 
-// Load playlists.json on startup
+// ---- YouTube player via direct iframe + postMessage ----
+// No external script needed. The YouTube embed at /embed/ID?enablejsapi=1
+// accepts JSON commands via postMessage and sends back state events.
+
+function createYTFrame(videoId, startSeconds) {
+  const old = document.getElementById('yt-frame');
+  if (old) old.remove();
+  playerReady = false;
+  currentTime = 0;
+  duration = 0;
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'yt-frame';
+  iframe.allow = 'autoplay';
+  iframe.style.cssText = 'position:absolute;top:-9999px;left:-9999px;width:320px;height:180px;border:none;';
+  iframe.src =
+    `https://www.youtube.com/embed/${videoId}` +
+    `?enablejsapi=1&autoplay=1&controls=0&rel=0&iv_load_policy=3` +
+    `&modestbranding=1&start=${Math.floor(startSeconds || 0)}`;
+  document.body.appendChild(iframe);
+  ytFrame = iframe;
+  currentVideoId = videoId;
+}
+
+function sendCmd(func, args) {
+  if (!ytFrame || !ytFrame.contentWindow) return;
+  ytFrame.contentWindow.postMessage(
+    JSON.stringify({ event: 'command', func, args: args || [] }),
+    'https://www.youtube.com'
+  );
+}
+
+window.addEventListener('message', (event) => {
+  if (event.origin !== 'https://www.youtube.com') return;
+  let data;
+  try { data = JSON.parse(event.data); } catch { return; }
+
+  if (data.event === 'onReady') {
+    playerReady = true;
+    // Ask YouTube to send periodic infoDelivery events (currentTime, duration, etc.)
+    if (ytFrame && ytFrame.contentWindow) {
+      ytFrame.contentWindow.postMessage(
+        JSON.stringify({ event: 'listening', id: 1 }),
+        'https://www.youtube.com'
+      );
+    }
+    sendCmd('setVolume', [volume]);
+    sendCmd('setPlaybackRate', [playbackRate]);
+    // If autoplay was blocked by the browser, kick it manually now
+    if (pendingPlayOnReady) {
+      sendCmd('playVideo');
+      pendingPlayOnReady = false;
+      isPlaying = true;
+    }
+    broadcastState();
+  } else if (data.event === 'onStateChange') {
+    const state = data.info;
+    if (state === 1) {        // PLAYING
+      isPlaying = true;
+      broadcastState();
+    } else if (state === 2) { // PAUSED
+      isPlaying = false;
+      broadcastState();
+    } else if (state === 0) { // ENDED
+      isPlaying = false;
+      nextTrack();
+    } else if (state === 3) { // BUFFERING
+      broadcastState('Buffering…');
+    }
+  } else if (data.event === 'onError') {
+    const codes = { 2: 'Invalid video ID', 5: 'HTML5 error', 100: 'Video not found', 101: 'Embedding disabled', 150: 'Embedding disabled' };
+    broadcastState('Error: ' + (codes[data.info] || `code ${data.info}`));
+  } else if (data.event === 'infoDelivery' && data.info) {
+    if (typeof data.info.currentTime === 'number') currentTime = data.info.currentTime;
+    if (typeof data.info.duration === 'number' && data.info.duration > 0) duration = data.info.duration;
+    if (typeof data.info.volume === 'number') volume = data.info.volume;
+    if (data.info.playerState === 1) isPlaying = true;
+    else if (data.info.playerState === 2 || data.info.playerState === 0) isPlaying = false;
+  }
+});
+
+// ---- Playlists ----
+
+function initPlaylists(data) {
+  playlists = data;
+  genreNames = Object.keys(playlists);
+  if (genreNames.length) {
+    loadGenre(genreNames[0]);
+  }
+  broadcastState();
+}
+
+// Load bundled playlists.json on startup; only used if no custom data is sent first
 fetch(chrome.runtime.getURL('playlists.json'))
   .then(r => r.json())
   .then(data => {
-    playlists = data;
-    genreNames = Object.keys(playlists);
-    if (genreNames.length) {
-      loadGenre(genreNames[0]);
-    }
+    if (!Object.keys(playlists).length) initPlaylists(data);
   });
 
 function loadGenre(genre) {
@@ -74,26 +168,24 @@ function loadGenre(genre) {
 
 function loadAlbum(index) {
   if (t3Timeout) cancel3minTimer();
-  audio.pause();
-  audio.src = '';
+  sendCmd('stopVideo');
   isPlaying = false;
+  currentVideoId = null;
+  currentTime = 0;
+  duration = 0;
   currentAlbumIndex = index;
   const entry = currentEntries[index];
   if (!entry) return;
 
-  // If album has tracks with timestamps, build track list from those
   const timestampTracks = (entry.tracks || []).filter(t => 'seconds' in t);
   if (timestampTracks.length > 0) {
-    // Single audio file with chapter timestamps
     tracks = timestampTracks.map(t => ({
       title: t.title,
-      url: entry.url,
-      startTime: t.seconds,
-      youtubeId: entry.youtubeId || null
+      youtubeId: entry.youtubeId,
+      startTime: t.seconds
     }));
   } else {
-    // Single track, no chapters
-    tracks = [{ title: entry.name, url: entry.url, startTime: 0, youtubeId: entry.youtubeId || null }];
+    tracks = [{ title: entry.name, youtubeId: entry.youtubeId, startTime: 0 }];
   }
 
   currentIndex = -1;
@@ -114,20 +206,25 @@ function generateShuffleOrder() {
 function loadAndPlay(index) {
   currentIndex = index;
   const track = tracks[index];
-  const needsNewSrc = audio.src !== track.url;
 
-  if (needsNewSrc) {
-    audio.src = track.url;
-  }
-  audio.playbackRate = playbackRate;
-  audio.currentTime = track.startTime || 0;
-  audio.play().then(() => {
+  if (!ytFrame) {
+    // First play — create the iframe; onReady will call playVideo
+    pendingPlayOnReady = true;
+    createYTFrame(track.youtubeId, track.startTime || 0);
+    broadcastState('Loading...');
+  } else if (currentVideoId !== track.youtubeId) {
+    // Different video — use loadVideoById command (no iframe recreation)
+    currentVideoId = track.youtubeId;
+    sendCmd('loadVideoById', [track.youtubeId, track.startTime || 0]);
+    isPlaying = true;
+    broadcastState('Loading...');
+  } else {
+    // Same video — seek and resume
+    sendCmd('seekTo', [track.startTime || 0, true]);
+    sendCmd('playVideo');
     isPlaying = true;
     broadcastState();
-  }).catch(() => {
-    broadcastState('Error loading track');
-  });
-  broadcastState('Loading...');
+  }
 }
 
 function nextTrack() {
@@ -142,12 +239,11 @@ function nextTrack() {
   } else {
     const nextIdx = currentIndex + 1;
     if (nextIdx >= tracks.length) {
-      // Auto-advance to next album
       if (currentAlbumIndex + 1 < currentEntries.length) {
         loadAlbum(currentAlbumIndex + 1);
         loadAndPlay(0);
       } else {
-        loadAndPlay(0); // loop back to first track
+        loadAndPlay(0);
       }
     } else {
       loadAndPlay(nextIdx);
@@ -157,8 +253,8 @@ function nextTrack() {
 
 function prevTrack() {
   if (tracks.length === 0) return;
-  if (audio.currentTime > 3) {
-    audio.currentTime = tracks[currentIndex] ? tracks[currentIndex].startTime || 0 : 0;
+  if (currentTime > 3) {
+    sendCmd('seekTo', [tracks[currentIndex] ? tracks[currentIndex].startTime || 0 : 0, true]);
     return;
   }
   if (shuffleMode) {
@@ -170,13 +266,11 @@ function prevTrack() {
   }
 }
 
-// For timestamp-based tracks, detect when we cross into the next chapter
 function checkChapterBoundary() {
   if (currentIndex < 0 || !tracks[currentIndex]) return;
-  // If next track uses same URL (same audio file, different chapter)
   const nextIdx = currentIndex + 1;
-  if (nextIdx < tracks.length && tracks[nextIdx].url === tracks[currentIndex].url) {
-    if (audio.currentTime >= tracks[nextIdx].startTime) {
+  if (nextIdx < tracks.length && tracks[nextIdx].youtubeId === tracks[currentIndex].youtubeId) {
+    if (currentTime >= tracks[nextIdx].startTime) {
       currentIndex = nextIdx;
       broadcastState();
     }
@@ -194,12 +288,12 @@ function getState(status) {
     isPlaying,
     shuffleMode,
     playbackRate,
-    volume: Math.round((t3FadeVol !== null ? t3FadeVol : audio.volume) * 100),
-    currentTime: audio.currentTime || 0,
-    duration: audio.duration || 0,
+    volume: t3FadeVol !== null ? t3FadeVol : volume,
+    currentTime,
+    duration,
     trackTitle: currentIndex >= 0 && tracks[currentIndex] ? tracks[currentIndex].title : null,
     youtubeId: currentIndex >= 0 && tracks[currentIndex] ? tracks[currentIndex].youtubeId || null : null,
-    tracks: tracks.map(t => t.title),
+    tracks: tracks.map(t => ({ title: t.title, seconds: t.startTime || 0, youtubeId: t.youtubeId || '' })),
     whiteNoise: whiteNoiseActive,
     noiseVolume: Math.round(noiseVolume * 100),
     timer3min: {
@@ -225,20 +319,16 @@ setInterval(() => {
   }
 }, 500);
 
-audio.addEventListener('ended', nextTrack);
-
 // ---- 30-second repeat timer ----
-// Plays 30 seconds from the current position, fades out, rewinds,
-// and repeats 10 times. Click again to cancel.
 const T3_DURATION_MS = 30000;
 const T3_TOTAL_LOOPS = 10;
 const T3_FADE_MS = 2000;
 let t3Timeout = null;
 let t3LoopsRemaining = 0;
 let t3StartTime = 0;
-let t3TrackUrl = null;
-let t3FadeVol = null;   // volume to restore after a fade (null = not fading)
-let t3Generation = 0;   // bumped on cancel so in-flight async fades abort
+let t3TrackVideoId = null;
+let t3FadeVol = null;   // saved volume (0-100) during fade; null = not fading
+let t3Generation = 0;
 
 function toggle3minTimer() {
   if (t3Timeout) {
@@ -252,11 +342,12 @@ function start3minTimer() {
   if (tracks.length === 0) return;
   if (currentIndex === -1) {
     nextTrack();
-  } else if (audio.paused) {
-    audio.play().then(() => { isPlaying = true; }).catch(() => {});
+  } else if (!isPlaying) {
+    sendCmd('playVideo');
+    isPlaying = true;
   }
-  t3TrackUrl = tracks[currentIndex].url;
-  t3StartTime = audio.currentTime || (tracks[currentIndex].startTime || 0);
+  t3TrackVideoId = tracks[currentIndex] ? tracks[currentIndex].youtubeId : null;
+  t3StartTime = currentTime || (tracks[currentIndex] ? tracks[currentIndex].startTime || 0 : 0);
   t3LoopsRemaining = T3_TOTAL_LOOPS;
   run3minLoop();
 }
@@ -267,25 +358,26 @@ function run3minLoop() {
 
   t3Timeout = setTimeout(async () => {
     const gen = t3Generation;
-    t3FadeVol = audio.volume;
+    t3FadeVol = volume;
     await fadeAudioTo(0, T3_FADE_MS, gen);
-    if (gen !== t3Generation) return;  // cancelled during fade
+    if (gen !== t3Generation) return;
     t3LoopsRemaining--;
 
     await rewindTo3minStart(gen);
     if (gen !== t3Generation) return;
 
     if (t3LoopsRemaining > 0) {
-      audio.play().then(() => { isPlaying = true; }).catch(() => {});
+      sendCmd('playVideo');
+      isPlaying = true;
       await fadeAudioTo(t3FadeVol, 1000, gen);
       if (gen !== t3Generation) return;
       t3FadeVol = null;
       run3minLoop();
     } else {
-      // All loops complete — pause at the loop start, restore volume
-      audio.pause();
+      sendCmd('pauseVideo');
       isPlaying = false;
-      audio.volume = t3FadeVol;
+      volume = t3FadeVol;
+      sendCmd('setVolume', [volume]);
       t3FadeVol = null;
       t3Timeout = null;
       broadcastState(`30s repeat complete (${T3_TOTAL_LOOPS}/${T3_TOTAL_LOOPS})`);
@@ -295,43 +387,44 @@ function run3minLoop() {
 
 function cancel3minTimer(statusMsg) {
   t3Generation++;
-  if (t3Timeout) {
-    clearTimeout(t3Timeout);
-    t3Timeout = null;
-  }
+  if (t3Timeout) { clearTimeout(t3Timeout); t3Timeout = null; }
   t3LoopsRemaining = 0;
   if (t3FadeVol !== null) {
-    audio.volume = t3FadeVol;
+    volume = t3FadeVol;
+    sendCmd('setVolume', [volume]);
     t3FadeVol = null;
   }
   broadcastState(statusMsg);
 }
 
 async function rewindTo3minStart(gen) {
-  // Restore chapter highlight for timestamp-based albums
   let idx = -1;
   for (let i = 0; i < tracks.length; i++) {
-    if (tracks[i].url === t3TrackUrl && (tracks[i].startTime || 0) <= t3StartTime) idx = i;
+    if (tracks[i].youtubeId === t3TrackVideoId && (tracks[i].startTime || 0) <= t3StartTime) idx = i;
   }
   if (idx >= 0) currentIndex = idx;
 
-  if (audio.src !== t3TrackUrl) {
-    // Playback drifted into a different file — reload the timer's track
-    audio.src = t3TrackUrl;
-    audio.playbackRate = playbackRate;
+  if (currentVideoId !== t3TrackVideoId) {
+    currentVideoId = t3TrackVideoId;
+    sendCmd('loadVideoById', [t3TrackVideoId, t3StartTime]);
     await Promise.race([
-      new Promise(r => audio.addEventListener('loadedmetadata', r, { once: true })),
+      new Promise(r => {
+        const check = setInterval(() => {
+          if (isPlaying) { clearInterval(check); r(); }
+        }, 200);
+      }),
       new Promise(r => setTimeout(r, 5000))
     ]);
     if (gen !== t3Generation) return;
   }
-  audio.currentTime = t3StartTime;
+  sendCmd('seekTo', [t3StartTime, true]);
   broadcastState();
 }
 
 function fadeAudioTo(target, durationMs, gen) {
+  // volume in 0-100 range throughout
   return new Promise(resolve => {
-    const startVol = audio.volume;
+    const startVol = volume;
     const steps = 20;
     let i = 0;
     const iv = setInterval(() => {
@@ -341,7 +434,8 @@ function fadeAudioTo(target, durationMs, gen) {
         return;
       }
       i++;
-      audio.volume = Math.min(1, Math.max(0, startVol + (target - startVol) * (i / steps)));
+      volume = Math.round(Math.min(100, Math.max(0, startVol + (target - startVol) * (i / steps))));
+      sendCmd('setVolume', [volume]);
       if (i >= steps) {
         clearInterval(iv);
         resolve();
@@ -432,7 +526,7 @@ function bTone(t) {
 }
 
 function beatsScheduler() {
-  const stepDur = (60/beatsBpm)/2; // 8th notes
+  const stepDur = (60/beatsBpm)/2;
   while(beatsNextNoteTime < beatsCtx.currentTime + 0.15) {
     const isOff = beatsCurrentStep % 2 === 1;
     const t = beatsNextNoteTime + (isOff ? stepDur*BEATS_SWING : 0) + (Math.random()*2-1)*BEATS_HUMANIZE;
@@ -476,16 +570,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     toggle3minTimer();
     return;
   }
+  if (msg.type === 'loadPlaylists') {
+    initPlaylists(msg.playlists);
+    return;
+  }
   if (msg.type === 'play') {
     if (currentIndex === -1 && tracks.length > 0) {
       nextTrack();
     } else {
-      audio.play();
+      sendCmd('playVideo');
       isPlaying = true;
       broadcastState();
     }
   } else if (msg.type === 'pause') {
-    audio.pause();
+    sendCmd('pauseVideo');
     isPlaying = false;
     broadcastState();
   } else if (msg.type === 'next') {
@@ -504,19 +602,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     setNoiseVolume();
     broadcastState();
   } else if (msg.type === 'volume') {
-    audio.volume = msg.value / 100;
-    if (t3FadeVol !== null) t3FadeVol = audio.volume;
+    volume = msg.value;
+    sendCmd('setVolume', [volume]);
+    if (t3FadeVol !== null) t3FadeVol = volume;
     broadcastState();
   } else if (msg.type === 'rate') {
     playbackRate = msg.value;
-    audio.playbackRate = playbackRate;
-    audio.defaultPlaybackRate = playbackRate;
+    sendCmd('setPlaybackRate', [playbackRate]);
     broadcastState();
   } else if (msg.type === 'seek') {
-    if (audio.duration) {
-      audio.currentTime = msg.fraction * audio.duration;
-      broadcastState();
-    }
+    if (duration) sendCmd('seekTo', [msg.fraction * duration, true]);
+    broadcastState();
   } else if (msg.type === 'playIndex') {
     loadAndPlay(msg.index);
   } else if (msg.type === 'switchGenre') {

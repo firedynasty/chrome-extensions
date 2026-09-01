@@ -1,6 +1,3 @@
-const playBtn = document.getElementById('playBtn');
-const prevBtn = document.getElementById('prevBtn');
-const nextBtn = document.getElementById('nextBtn');
 const shuffleBtn = document.getElementById('shuffleBtn');
 const noiseBtn = document.getElementById('noiseBtn');
 const noiseVolLabel = document.getElementById('noiseVolLabel');
@@ -23,8 +20,22 @@ const ytAnchor = document.getElementById('ytAnchor');
 
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 let currentRate = 1;
+let currentPlaylists = null;
 
-let lastIsPlaying = false;
+function showYouTubeLinkForAlbum() {
+  const genre = genreSelect.value;
+  const idx = parseInt(albumSelect.value) || 0;
+  const entry = currentPlaylists && (currentPlaylists[genre] || [])[idx];
+  if (entry && entry.youtubeId) {
+    const url = `https://www.youtube.com/watch?v=${entry.youtubeId}`;
+    ytAnchor.href = url;
+    ytLink.style.display = 'block';
+    navigator.clipboard.writeText(url).then(() => {
+      statusEl.textContent = 'Link copied!';
+      setTimeout(() => { statusEl.textContent = ''; }, 1500);
+    }).catch(() => {});
+  }
+}
 
 function formatTime(secs) {
   if (isNaN(secs)) return '0:00';
@@ -36,16 +47,13 @@ function formatTime(secs) {
 function applyState(state) {
   if (!state || state.type !== 'stateUpdate') return;
 
-  lastIsPlaying = state.isPlaying;
-  trackTitle.textContent = state.trackTitle || 'Click play to start';
+  trackTitle.textContent = state.trackTitle || '';
   if (state.youtubeId) {
     ytAnchor.href = `https://www.youtube.com/watch?v=${state.youtubeId}`;
     ytLink.style.display = 'block';
   } else {
     ytLink.style.display = 'none';
   }
-  playBtn.innerHTML = state.isPlaying ? '&#9646;&#9646;' : '&#9654;';
-
   if (state.shuffleMode) {
     shuffleBtn.style.background = '#c9a84c';
     shuffleBtn.style.color = '#1a1a2e';
@@ -104,12 +112,23 @@ function applyState(state) {
   }
 
   if (state.tracks) {
-    trackListEl.innerHTML = state.tracks.map((title, i) =>
-      `<div class="track-item${i === state.currentIndex ? ' active' : ''}" data-index="${i}">${title}</div>`
-    ).join('');
+    trackListEl.innerHTML = state.tracks.map((t, i) => {
+      const title = typeof t === 'object' ? t.title : t;
+      const ytId  = typeof t === 'object' ? t.youtubeId : '';
+      const secs  = typeof t === 'object' ? (t.seconds || 0) : 0;
+      return `<div class="track-item${i === state.currentIndex ? ' active' : ''}" data-index="${i}" data-ytid="${ytId}" data-secs="${Math.floor(secs)}">${title}</div>`;
+    }).join('');
     trackListEl.querySelectorAll('.track-item').forEach(el => {
       el.addEventListener('click', () => {
-        send({ type: 'playIndex', index: parseInt(el.dataset.index) });
+        const ytId = el.dataset.ytid;
+        const secs = el.dataset.secs || '0';
+        if (ytId) {
+          const url = `https://www.youtube.com/watch?v=${ytId}&t=${secs}s`;
+          navigator.clipboard.writeText(url).then(() => {
+            statusEl.textContent = 'Copied!';
+            setTimeout(() => { statusEl.textContent = ''; }, 1500);
+          }).catch(() => {});
+        }
       });
     });
   }
@@ -124,11 +143,18 @@ async function send(msg) {
   }
 }
 
-// Load playlists.json directly in popup to populate dropdowns immediately
+// Load playlists — check chrome.storage.local first, fall back to bundled file
 async function initDropdowns() {
   try {
-    const resp = await fetch('playlists.json');
-    const playlists = await resp.json();
+    let playlists;
+    const stored = await chrome.storage.local.get('bachPlaylists');
+    if (stored.bachPlaylists && typeof stored.bachPlaylists === 'object' && !Array.isArray(stored.bachPlaylists)) {
+      playlists = stored.bachPlaylists;
+    } else {
+      const resp = await fetch('playlists.json');
+      playlists = await resp.json();
+    }
+    currentPlaylists = playlists;
     const genres = Object.keys(playlists);
 
     genreSelect.innerHTML = genres.map(g =>
@@ -146,11 +172,13 @@ async function initDropdowns() {
       loadAlbumOptions(genreSelect.value);
       chrome.storage.local.set({ bachGenre: genreSelect.value, bachAlbum: 0 });
       send({ type: 'switchGenre', name: genreSelect.value });
+      showYouTubeLinkForAlbum();
     });
 
     albumSelect.addEventListener('change', () => {
       chrome.storage.local.set({ bachAlbum: parseInt(albumSelect.value) });
       send({ type: 'switchAlbum', index: parseInt(albumSelect.value) });
+      showYouTubeLinkForAlbum();
     });
 
     // Restore saved dropdown selection
@@ -161,21 +189,12 @@ async function initDropdowns() {
     if (saved.bachAlbum !== undefined) {
       albumSelect.value = saved.bachAlbum;
     }
+    showYouTubeLinkForAlbum();
   } catch (e) {
     statusEl.textContent = 'Error loading playlists';
   }
 }
 
-playBtn.addEventListener('click', () => {
-  if (lastIsPlaying) {
-    send({ type: 'pause' });
-  } else {
-    send({ type: 'play' });
-  }
-});
-
-nextBtn.addEventListener('click', () => send({ type: 'next' }));
-prevBtn.addEventListener('click', () => send({ type: 'prev' }));
 shuffleBtn.addEventListener('click', () => send({ type: 'shuffle' }));
 noiseBtn.addEventListener('click', () => send({ type: 'toggleNoise' }));
 
@@ -224,9 +243,7 @@ rateUpBtn.addEventListener('click', () => stepRate(1));
 timer3minBtn.addEventListener('click', () => send({ type: 'timer3minToggle' }));
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === '0') {
-    playBtn.click();
-  } else if (e.key === '=' || e.key === '+') {
+  if (e.key === '=' || e.key === '+') {
     adjustVolume(5);
   } else if (e.key === '-' || e.key === '_') {
     adjustVolume(-5);
@@ -236,6 +253,8 @@ document.addEventListener('keydown', (e) => {
     stepRate(1);
   }
 });
+
+document.getElementById('accessLinkBtn').addEventListener('click', showYouTubeLinkForAlbum);
 
 // Init dropdowns from local file, then try to get playback state
 initDropdowns().then(() => {
@@ -425,24 +444,6 @@ document.getElementById('beatsFileInput').addEventListener('change', async (e) =
   e.target.value = '';
 });
 
-document.getElementById('beatsDbxLoadBtn').addEventListener('click', async () => {
-  const statusEl = document.getElementById('beatsStatus');
-  const token = await getDbxToken();
-  if (!token) { statusEl.textContent = '✗ Set Dropbox token first'; setTimeout(() => { statusEl.textContent = ''; }, 2500); return; }
-  statusEl.textContent = 'Downloading…';
-  try {
-    const raw = JSON.parse(await dbxDownload(token, DROPBOX_PRESETS_PATH));
-    if (!Array.isArray(raw)) throw new Error('Expected a JSON array');
-    beatsPresets = raw.map(normalisePreset);
-    await saveBeatsPresets(beatsPresets);
-    populateBeatsDropdown();
-    if (beatsPresets.length) selectBeatsPreset(0);
-    statusEl.textContent = `✓ ${beatsPresets.length} presets from Dropbox`;
-  } catch (err) {
-    statusEl.textContent = '✗ ' + err.message;
-  }
-  setTimeout(() => { statusEl.textContent = ''; }, 2500);
-});
 
 // ── Controls ──────────────────────────────────────────────────────────────────
 
@@ -508,111 +509,40 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'stateUpdate') _patchedApplyState(msg);
 });
 
-// ── Dropbox integration ───────────────────────────────────────────────────────
-
-const DROPBOX_PRESETS_PATH = '/vercel/presets_8steps.json';
-
-async function getDbxToken() {
-  const r = await chrome.storage.local.get('beatsDbxToken');
-  return r.beatsDbxToken || null;
-}
-
-async function dbxDownload(token, path) {
-  const res = await fetch('https://content.dropboxapi.com/2/files/download', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + token,
-      'Dropbox-API-Arg': JSON.stringify({ path }),
-    },
-  });
-  if (!res.ok) throw new Error('Dropbox download failed: ' + res.status);
-  return res.text();
-}
-
-async function dbxUpload(token, path, content) {
-  const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + token,
-      'Dropbox-API-Arg': JSON.stringify({ path, mode: { '.tag': 'overwrite' }, mute: true }),
-      'Content-Type': 'application/octet-stream',
-    },
-    body: content,
-  });
-  if (!res.ok) throw new Error('Dropbox upload failed: ' + res.status);
-}
-
-async function initDbxTokenUI() {
-  const token = await getDbxToken();
-  const input = document.getElementById('beatsDbxToken');
-  if (token) input.placeholder = '● token set';
-}
-
-document.getElementById('beatsDbxSetBtn').addEventListener('click', async () => {
-  const input = document.getElementById('beatsDbxToken');
-  const token = input.value.trim();
-  const statusEl = document.getElementById('beatsStatus');
-  if (!token) { statusEl.textContent = '✗ Paste a token first'; setTimeout(() => { statusEl.textContent = ''; }, 2000); return; }
-  await chrome.storage.local.set({ beatsDbxToken: token });
-  input.value = '';
-  input.placeholder = '● token set';
-  statusEl.textContent = '✓ Token saved';
-  setTimeout(() => { statusEl.textContent = ''; }, 1500);
-});
-
-document.getElementById('beatsDbxSaveBtn').addEventListener('click', async () => {
-  const statusEl = document.getElementById('beatsStatus');
-  const token = await getDbxToken();
-  if (!token) { statusEl.textContent = '✗ Set Dropbox token first'; setTimeout(() => { statusEl.textContent = ''; }, 2500); return; }
-  if (!beatsCurrentGrid) { statusEl.textContent = '✗ No preset loaded'; setTimeout(() => { statusEl.textContent = ''; }, 2000); return; }
-
-  const selEl = document.getElementById('beatsPresetSelect');
-  const idx = parseInt(selEl.value);
-  const baseName = (!isNaN(idx) && beatsPresets[idx]) ? beatsPresets[idx].name : 'Untitled';
-  const bpm = parseInt(document.getElementById('beatsBpmSlider').value);
-  const replaceInput = document.getElementById('beatsDbxReplaceName');
-  const replaceName = replaceInput.value.trim();
-
-  statusEl.textContent = 'Uploading…';
-  try {
-    // Download freshest copy so concurrent browser saves aren't lost
-    let arr = [];
-    try { arr = JSON.parse(await dbxDownload(token, DROPBOX_PRESETS_PATH)); } catch (_) {}
-    if (!Array.isArray(arr)) arr = [];
-
-    let saveName;
-    const entry = { bpm, desc: '', ...Object.fromEntries(BEATS_TRACKS.map(t => [t, [...beatsCurrentGrid[t]]])) };
-
-    if (replaceName) {
-      // Replace mode: find by name and overwrite; append if not found
-      saveName = replaceName;
-      entry.name = saveName;
-      const i = arr.findIndex(p => p.name === replaceName);
-      if (i !== -1) arr[i] = entry;
-      else arr.push(entry);
-      replaceInput.value = '';
-    } else {
-      // Append mode: use "{name} -- edited"
-      saveName = baseName.endsWith(' -- edited') ? baseName : baseName + ' -- edited';
-      entry.name = saveName;
-      arr.push(entry);
-    }
-
-    await dbxUpload(token, DROPBOX_PRESETS_PATH, JSON.stringify(arr, null, 2));
-
-    // Sync to local storage so dropdown updates immediately
-    beatsPresets = arr.map(normalisePreset);
-    await saveBeatsPresets(beatsPresets);
-    populateBeatsDropdown();
-    selEl.value = beatsPresets.length - 1;
-
-    statusEl.textContent = replaceName ? `✓ Replaced "${saveName}"` : `✓ Appended "${saveName}"`;
-  } catch (err) {
-    statusEl.textContent = '✗ ' + err.message;
-  }
-  setTimeout(() => { statusEl.textContent = ''; }, 3000);
-});
-
 // ── Boot ──────────────────────────────────────────────────────────────────────
 initBeats();
-initDbxTokenUI();
+
+// Playlist file picker
+document.getElementById('playlistLoadBtn').addEventListener('click', () => {
+  document.getElementById('playlistFileInput').click();
+});
+
+document.getElementById('playlistFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const st = document.getElementById('playlistStatus');
+  st.textContent = 'Loading\u2026';
+  try {
+    const raw = JSON.parse(await file.text());
+    if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Expected a JSON object with categories');
+    await chrome.storage.local.set({ bachPlaylists: raw });
+    await send({ type: 'loadPlaylists', playlists: raw });
+    await initDropdowns();
+    st.textContent = `\u2713 ${Object.keys(raw).length} categories loaded`;
+  } catch (err) {
+    st.textContent = '\u2717 ' + err.message;
+  }
+  setTimeout(() => { document.getElementById('playlistStatus').textContent = ''; }, 3000);
+  e.target.value = '';
+});
+
+document.getElementById('playlistClearBtn').addEventListener('click', async () => {
+  const st = document.getElementById('playlistStatus');
+  await chrome.storage.local.remove('bachPlaylists');
+  const resp = await fetch('playlists.json');
+  const bundled = await resp.json();
+  await send({ type: 'loadPlaylists', playlists: bundled });
+  await initDropdowns();
+  st.textContent = '\u2713 Reverted to built-in';
+  setTimeout(() => { st.textContent = ''; }, 2000);
+});

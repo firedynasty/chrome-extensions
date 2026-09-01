@@ -1,11 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Music Player",
-  "version": "2.0",
+  "version": "3.0",
   "description": "Persistent music player with genre/album playlists",
-  "permissions": ["offscreen", "storage"],
+  "permissions": ["offscreen", "storage", "tabs"],
   "background": {
     "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; frame-src https://www.youtube.com; object-src 'self'"
   },
   "web_accessible_resources": [{
     "resources": ["playlists.json"],

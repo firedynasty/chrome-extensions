@@ -6,10 +6,14 @@ async function ensureOffscreen() {
     await chrome.offscreen.createDocument({
       url: 'offscreen.html',
       reasons: ['AUDIO_PLAYBACK'],
-      justification: 'Persistent Bach audio playback across tabs'
+      justification: 'Persistent YouTube streaming and audio playback via IFrame API across tabs'
     });
     // Give the offscreen doc a moment to register its listener
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 200));
+    const { bachPlaylists } = await chrome.storage.local.get('bachPlaylists');
+    if (bachPlaylists) {
+      chrome.runtime.sendMessage({ target: 'offscreen', type: 'loadPlaylists', playlists: bachPlaylists }).catch(() => {});
+    }
   }
 }
 

@@ -102,6 +102,17 @@ def is_url_line(line):
     return bool(re.search(r'https?://', line))
 
 
+def is_youtube_url(url):
+    """Check if a URL points to YouTube."""
+    return 'youtube.com' in url or 'youtu.be' in url
+
+
+def youtube_id_from_url(url):
+    """Extract YouTube video ID from a watch URL, short URL, or shorts URL."""
+    m = re.search(r'(?:v=|youtu\.be/|shorts/)([\w-]{6,})', url)
+    return m.group(1) if m else None
+
+
 def parse_timestamp_line(line):
     """Parse a timestamp line into time string and title."""
     m = re.match(r'^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.*)$', line)
@@ -153,12 +164,18 @@ def parse_file(filepath):
             name, url = parse_url_line(line)
             if not url:
                 continue
-            if not name:
-                name = name_from_url(url)
-            youtube_id = extract_youtube_id(url)
-            current_entry = {'name': name, 'url': url, 'tracks': []}
-            if youtube_id:
-                current_entry['youtubeId'] = youtube_id
+            if is_youtube_url(url):
+                youtube_id = youtube_id_from_url(url)
+                # name may be empty here; will be filled from txt stem in main()
+                current_entry = {'name': name, 'youtubeId': youtube_id, 'tracks': []}
+            else:
+                # Existing Dropbox logic: keep url field, extract youtubeId from filename
+                if not name:
+                    name = name_from_url(url)
+                youtube_id = extract_youtube_id(url)
+                current_entry = {'name': name, 'url': url, 'tracks': []}
+                if youtube_id:
+                    current_entry['youtubeId'] = youtube_id
             entries.append(current_entry)
 
         elif is_timestamp_line(line) and current_entry is not None:
@@ -215,6 +232,11 @@ def main():
 
         for txt_file in sorted(category_dir.glob('*.txt')):
             entries = parse_file(txt_file)
+            # Fill empty names from the txt filename stem (strip [ID] suffix)
+            stem = re.sub(r'\s*\[[\w-]+\]$', '', txt_file.stem)
+            for e in entries:
+                if not e.get('name'):
+                    e['name'] = stem
             # Prefix entry names with the source filename when a file
             # contains multiple URL-only entries (no timestamps)
             if len(entries) > 1:

@@ -4,7 +4,7 @@
   const BAR_ID    = 'yt-controls-bar';
   const SPACER_ID = 'yt-controls-spacer';
   const MODAL_ID  = 'yt-ctrl-import-modal';
-  const VER       = 2;
+  const VER       = 3;
   const VIEWER_BASE = 'https://vercel-youtubeviewer.vercel.app/';
 
   // ── helpers ──────────────────────────────────────────────────────────────
@@ -18,17 +18,30 @@
   }
 
   function changeVolume(delta) {
-    const v = video();
-    if (!v) { flashStatus('No video', '#e74c3c'); return; }
-    v.muted = false;
-    const newVol = Math.max(0, Math.min(1, Math.round((v.volume + delta) * 100) / 100));
-    v.volume = newVol;
-    // Also tell YouTube's player so it doesn't override us after a few minutes
+    // Dispatch ArrowUp/ArrowDown on #movie_player — same path YouTube's own
+    // keyboard handler uses, so both audio and the volume UI update correctly.
+    // Each arrow press = 5%, so 2 presses = 10%.
     const player = document.querySelector('#movie_player');
-    if (player && typeof player.setVolume === 'function') {
-      player.setVolume(Math.round(newVol * 100));
+    if (!player) { flashStatus('No video', '#e74c3c'); return; }
+    const key = delta > 0 ? 'ArrowUp' : 'ArrowDown';
+    const steps = Math.round(Math.abs(delta) * 100 / 5);
+    // Blur any focused input so YouTube doesn't swallow the event elsewhere
+    const prev = document.activeElement;
+    if (prev && ['INPUT', 'TEXTAREA', 'SELECT'].includes(prev.tagName)) prev.blur();
+    player.focus();
+    for (let i = 0; i < steps; i++) {
+      player.dispatchEvent(new KeyboardEvent('keydown', {
+        key, bubbles: true, cancelable: true,
+        keyCode: delta > 0 ? 38 : 40, which: delta > 0 ? 38 : 40,
+      }));
     }
-    flashStatus('Vol ' + Math.round(newVol * 100) + '%', '#2ecc71');
+    // Show new volume after YouTube processes the events
+    setTimeout(() => {
+      if (typeof player.getVolume === 'function') {
+        flashStatus('Vol ' + player.getVolume() + '%', '#2ecc71');
+      }
+      if (prev && prev !== player && typeof prev.focus === 'function') prev.focus();
+    }, 50);
   }
 
   function fmtTime(sec) {

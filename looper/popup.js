@@ -29,7 +29,7 @@ function loopMixInject() {
   const MODAL_ID = '__lmx_modal';
   const CHIP_ID = '__lmx_chip';
 
-  const LMX_VERSION = 14;
+  const LMX_VERSION = 17;
 
   // Re-inject with current version: module already lives in this tab — just
   // reopen the modal. Older injections (or their orphaned DOM) get torn down
@@ -106,46 +106,24 @@ function loopMixInject() {
     return null;
   }
 
-  // mix_mp3.py semantics: end containing ":" = absolute timestamp
-  // (duration = end - start); plain-number end = duration in seconds.
-  // Loops defaults to 1. Returns { start, duration, loops, endLabel } or { error }.
-  function parseLoopMixLine(raw) {
-    const parts = raw.split(',').map(p => p.trim()).filter(p => p);
-    if (parts.length < 2 || parts.length > 3) {
-      return { error: 'need 2 or 3 comma-separated values' };
+  // Parse all timestamps from the textarea (one per line or comma-separated).
+  // Returns an array of seconds. YouTube URL rows are skipped.
+  function parseTimestamps(raw) {
+    var parts = raw.split(/[\n,]/).map(function(p) { return p.trim(); })
+      .filter(function(p) { return p && !extractYouTubeId(p); });
+    var times = [];
+    for (var i = 0; i < parts.length; i++) {
+      var t = parseMixTime(parts[i]);
+      if (t !== null && !isNaN(t)) times.push(t);
     }
+    return times;
+  }
 
-    const start = parseMixTime(parts[0]);
-    if (start === null || isNaN(start)) {
-      return { error: 'bad start time "' + parts[0] + '"' };
-    }
-
-    let duration, endLabel;
-    if (parts[1].includes(':')) {
-      const endSec = parseMixTime(parts[1]);
-      if (endSec === null || isNaN(endSec)) {
-        return { error: 'bad end time "' + parts[1] + '"' };
-      }
-      duration = endSec - start;
-      if (duration <= 0) {
-        return { error: 'end must be after start' };
-      }
-      endLabel = formatSecondsToTime(endSec);
-    } else {
-      duration = parseFloat(parts[1]);
-      if (isNaN(duration) || duration <= 0) {
-        return { error: 'duration must be positive seconds' };
-      }
-      endLabel = duration + 's ' + String.fromCharCode(0x2192) + ' ' + formatSecondsToTime(start + duration);
-    }
-
-    let loops = 1;
-    if (parts.length === 3) {
-      loops = parseInt(parts[2]);
-      if (isNaN(loops) || loops < 1) loops = 1;
-    }
-
-    return { start, duration, loops, endLabel };
+  // Each timestamp becomes its own segment: start → start+30s, looping 5 times.
+  function timesToSegments(times) {
+    return times.map(function(t) {
+      return { start: t, duration: 30, loops: 5, endLabel: formatSecondsToTime(t + 30) };
+    });
   }
 
   // Plain YouTube URL on its own row (watch?v= or youtu.be) → video id.
@@ -399,51 +377,40 @@ function loopMixInject() {
     buildChipTable();
   }
 
-  // Compact per-row list parsed fresh from the modal textarea (so edits show up
-  // without regenerating the modal table). Keeps state.rows in sync so row
-  // indices match runRow. The currently looping row is highlighted.
+  // Compact per-row list built from consecutive timestamp pairs in the textarea.
+  // Keeps state.rows in sync so row indices match runRow. Active row highlighted.
   function buildChipTable() {
     const panel = document.getElementById(CHIP_ID + '_panel');
     if (!panel) return;
     panel.innerHTML = '';
     const ta = document.getElementById('__lmx_textarea');
     const raw = ta ? ta.value : '';
-    const lines = raw.split('\n').map(l => l.trim()).filter(l => l && !extractYouTubeId(l));
-    if (!lines.length) {
+    const segs = timesToSegments(parseTimestamps(raw));
+    if (!segs.length) {
       const empty = document.createElement('div');
       empty.style.cssText = 'font-size:12px; font-weight:400; opacity:0.85; padding:2px 4px;';
-      empty.textContent = 'No segments ' + String.fromCharCode(0x2014) + ' open the modal to add lines';
+      empty.textContent = 'No segments ' + String.fromCharCode(0x2014) + ' open the modal to add timestamps';
       panel.appendChild(empty);
       return;
     }
-    state.rows = [];
-    lines.forEach((line, i) => {
-      const parsed = parseLoopMixLine(line);
-      state.rows.push(parsed.error ? null : parsed);
+    state.rows = segs.slice();
+    segs.forEach(function(seg, i) {
       const active = i === state.activeRow && (state.interval || state.paused);
       const rowEl = document.createElement('div');
       rowEl.style.cssText = 'display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:4px; font-size:12px;'
         + (active ? ' background:rgba(255,255,255,0.25);' : '')
-        + (i < lines.length - 1 ? ' border-bottom:1px solid rgba(255,255,255,0.15);' : '');
+        + (i < segs.length - 1 ? ' border-bottom:1px solid rgba(255,255,255,0.15);' : '');
       const txt = document.createElement('span');
       txt.style.cssText = 'flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-weight:400;';
-      if (parsed.error) {
-        txt.style.color = '#FFCDD2';
-        txt.textContent = (i + 1) + '. ' + parsed.error;
-        txt.title = line;
-      } else {
-        txt.textContent = (i + 1) + '. ' + formatSecondsToTime(parsed.start) + String.fromCharCode(0x2192) + formatSecondsToTime(parsed.start + parsed.duration)
-          + (parsed.loops > 1 ? ' ' + String.fromCharCode(0x00D7) + parsed.loops : '');
-      }
+      txt.textContent = (i + 1) + '. ' + formatSecondsToTime(seg.start) + String.fromCharCode(0x2192) + seg.endLabel
+        + ' ' + String.fromCharCode(0x00D7) + '5';
       rowEl.appendChild(txt);
-      if (!parsed.error) {
-        const play = document.createElement('button');
-        play.textContent = String.fromCharCode(0x25B6);
-        play.title = 'Loop this segment';
-        play.style.cssText = 'background:rgba(0,0,0,0.25); border:none; color:#fff; border-radius:4px; cursor:pointer; font-size:11px; font-weight:700; padding:2px 8px; flex-shrink:0;';
-        play.addEventListener('click', function() { runRow(i); });
-        rowEl.appendChild(play);
-      }
+      const play = document.createElement('button');
+      play.textContent = String.fromCharCode(0x25B6);
+      play.title = 'Loop this segment';
+      play.style.cssText = 'background:rgba(0,0,0,0.25); border:none; color:#fff; border-radius:4px; cursor:pointer; font-size:11px; font-weight:700; padding:2px 8px; flex-shrink:0;';
+      play.addEventListener('click', function() { runRow(i); });
+      rowEl.appendChild(play);
       panel.appendChild(rowEl);
     });
   }
@@ -494,12 +461,12 @@ function loopMixInject() {
     info.style.cssText = 'font-size:12px; color:#888; margin-bottom:12px;';
 
     const label = document.createElement('label');
-    label.textContent = 'One segment per line: Start time, End time, [Times to loop ' + String.fromCharCode(0x2014) + ' optional, default 1]';
+    label.textContent = 'Timestamps (one per line or comma-separated) ' + String.fromCharCode(0x2014) + ' each loops +30s ' + String.fromCharCode(0x00D7) + '5:';
     label.style.cssText = 'font-size:12px; color:#bbb; display:block; margin-bottom:6px;';
 
     const textarea = document.createElement('textarea');
     textarea.id = '__lmx_textarea';
-    textarea.placeholder = '1:30, 1:44\n2:00, 2:10, 5\n3:00, 15, 3   (end without a colon = duration in seconds)';
+    textarea.placeholder = '1:00\n2:30\n4:15\n\nor paste comma-separated: 1:00,2:30,4:15';
     textarea.style.cssText = 'width:100%; min-height:110px; padding:10px; font-size:13px; background:#2a2a2a; color:#fff; border:1px solid #555; border-radius:6px; resize:vertical; font-family:inherit; line-height:1.5; box-sizing:border-box; outline:none;';
 
     const btnRow = document.createElement('div');
@@ -561,6 +528,11 @@ function loopMixInject() {
         const pageTitle = (document.title || '').replace(/ - YouTube$/, '').trim();
         if (pageTitle) toSet['__lmx_title_' + vid] = pageTitle;
         chrome.storage.local.set(toSet);
+        // Also write to localStorage (origin-scoped) so yt-controls can read it
+        try {
+          localStorage.setItem('__lmx_' + vid, textarea.value);
+          document.dispatchEvent(new CustomEvent('__lmx_updated', { detail: vid }));
+        } catch(e) {}
       }
     });
 
@@ -713,51 +685,39 @@ function loopMixInject() {
     const raw = document.getElementById('__lmx_textarea').value;
     const container = document.getElementById('__lmx_table');
     const hasUrl = !!extractYouTubeId(raw);
-    // Skip YouTube URL rows — they feed the YouTube link, not the table
-    const lines = raw.split('\n').map(l => l.trim()).filter(l => l && !extractYouTubeId(l));
-    if (!lines.length) {
+    const times = parseTimestamps(raw);
+    const segs = timesToSegments(times);
+
+    if (!segs.length) {
       container.innerHTML = '';
-      setStatus(hasUrl ? 'YouTube link only ' + String.fromCharCode(0x2014) + ' add segment lines to loop' : 'Nothing entered', true);
+      setStatus(hasUrl ? 'YouTube link only ' + String.fromCharCode(0x2014) + ' add timestamps to loop' : 'Nothing entered', true);
       return;
     }
 
-    state.rows = [];
+    state.rows = segs.slice();
     let html = '<table style="width:100%; border-collapse:collapse; font-size:13px; color:#e0e0e0;">';
     html += '<tr style="color:#26C6DA; text-align:left;">'
           + '<th style="padding:4px 6px; border-bottom:1px solid #444;">#</th>'
           + '<th style="padding:4px 6px; border-bottom:1px solid #444;">Start</th>'
           + '<th style="padding:4px 6px; border-bottom:1px solid #444;">End</th>'
-          + '<th style="padding:4px 6px; border-bottom:1px solid #444;">Loops</th>'
           + '<th style="padding:4px 6px; border-bottom:1px solid #444;"></th></tr>';
 
-    lines.forEach((line, i) => {
-      const parsed = parseLoopMixLine(line);
+    segs.forEach(function(seg, i) {
       const rowStyle = 'border-bottom:1px solid #333;';
-      if (parsed.error) {
-        state.rows.push(null);
-        html += '<tr style="' + rowStyle + ' color:#ef5350;">'
-              + '<td style="padding:4px 6px;">' + (i + 1) + '</td>'
-              + '<td style="padding:4px 6px;" colspan="3">' + escapeHtml(parsed.error) + ' ' + String.fromCharCode(0x2014) + ' <span style="color:#888;">' + escapeHtml(line) + '</span></td>'
-              + '<td style="padding:4px 6px;"></td></tr>';
-      } else {
-        state.rows.push(parsed);
-        html += '<tr style="' + rowStyle + '">'
-              + '<td style="padding:4px 6px;">' + (i + 1) + '</td>'
-              + '<td style="padding:4px 6px;">' + formatSecondsToTime(parsed.start) + '</td>'
-              + '<td style="padding:4px 6px;">' + escapeHtml(parsed.endLabel) + '</td>'
-              + '<td style="padding:4px 6px;">' + parsed.loops + '</td>'
-              + '<td style="padding:4px 6px;"><button data-lmx-row="' + i + '" style="padding:4px 14px; background:linear-gradient(45deg,#26C6DA,#0097A7); color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:12px; font-weight:700;">' + String.fromCharCode(0x25B6) + '</button></td></tr>';
-      }
+      html += '<tr style="' + rowStyle + '">'
+            + '<td style="padding:4px 6px;">' + (i + 1) + '</td>'
+            + '<td style="padding:4px 6px;">' + formatSecondsToTime(seg.start) + '</td>'
+            + '<td style="padding:4px 6px;">' + escapeHtml(seg.endLabel) + '</td>'
+            + '<td style="padding:4px 6px;"><button data-lmx-row="' + i + '" style="padding:4px 14px; background:linear-gradient(45deg,#26C6DA,#0097A7); color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:12px; font-weight:700;">' + String.fromCharCode(0x25B6) + '</button></td></tr>';
     });
     html += '</table>';
     container.innerHTML = html;
 
-    container.querySelectorAll('[data-lmx-row]').forEach(btn => {
-      btn.addEventListener('click', () => runRow(parseInt(btn.getAttribute('data-lmx-row'))));
+    container.querySelectorAll('[data-lmx-row]').forEach(function(btn) {
+      btn.addEventListener('click', function() { runRow(parseInt(btn.getAttribute('data-lmx-row'))); });
     });
 
-    const okCount = state.rows.filter(r => r).length;
-    setStatus('Table generated: ' + okCount + ' of ' + lines.length + ' segments ready', !okCount);
+    setStatus('Table generated: ' + segs.length + ' segment' + (segs.length > 1 ? 's' : '') + ' ' + String.fromCharCode(0x00D7) + '5 each' + String.fromCharCode(0x2014) + 'ready');
   }
 
   // Row ▶ — loop that segment, then close the modal so playback is visible

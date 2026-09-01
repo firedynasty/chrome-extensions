@@ -321,7 +321,7 @@ setInterval(() => {
 
 // ---- 30-second repeat timer ----
 const T3_DURATION_MS = 30000;
-const T3_TOTAL_LOOPS = 10;
+const T3_TOTAL_LOOPS = 5;
 const T3_FADE_MS = 2000;
 let t3Timeout = null;
 let t3LoopsRemaining = 0;

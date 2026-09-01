@@ -62,20 +62,30 @@
   }
 
   function parseHashUrl(raw) {
+    // Case 1: #? Vercel URL format
     const idx = raw.indexOf('#?');
-    const inner = idx >= 0 ? raw.slice(idx + 2) : raw;
-    const tokens = inner.split(',');
-    // first token is the YouTube video URL
-    const videoUrl = tokens[0] || '';
-    const videoId = (() => {
-      try { return new URL(videoUrl).searchParams.get('v') || ''; } catch { return ''; }
-    })();
+    if (idx >= 0) {
+      const inner = raw.slice(idx + 2);
+      const tokens = inner.split(',');
+      const videoUrl = tokens[0] || '';
+      const videoId = (() => {
+        try { return new URL(videoUrl).searchParams.get('v') || ''; } catch { return ''; }
+      })();
+      const stamps = [];
+      for (let i = 1; i < tokens.length; i++) {
+        const m = tokens[i].match(/^(\d+:\d+(?::\d+)?)(?:\(([^)]+)\))?/);
+        if (m) stamps.push({ ts: m[1], note: (m[2] || '').replace(/_/g, ' ') });
+      }
+      return { stamps, videoId };
+    }
+    // Case 2: plain comma-separated timestamps, e.g. 1:00,2:00,3:00
+    const tokens = raw.split(',');
     const stamps = [];
-    for (let i = 1; i < tokens.length; i++) {
-      const m = tokens[i].match(/^(\d+:\d+(?::\d+)?)(?:\(([^)]+)\))?/);
+    for (const token of tokens) {
+      const m = token.trim().match(/^(\d+:\d+(?::\d+)?)(?:\(([^)]+)\))?/);
       if (m) stamps.push({ ts: m[1], note: (m[2] || '').replace(/_/g, ' ') });
     }
-    return { stamps, videoId };
+    return { stamps, videoId: '' };
   }
 
   function currentVideoId() {
@@ -83,12 +93,51 @@
   }
 
   function storageKey() {
-    return 'ytCtrl_stamps_' + currentVideoId();
+    return '__lmx_' + currentVideoId();
   }
 
   let _timeInterval = null;
   let _stamps = [];
   let _kbHandler = null;
+
+  // ── stamp loop engine (30s × 5) ──────────────────────────────────────────
+  let _loopInterval = null;
+  let _loopStart = 0;
+  let _loopEnd = 0;
+  let _loopRemaining = 0;
+
+  function startStampLoop(startSec) {
+    cancelStampLoop();
+    const v = video();
+    if (!v) return;
+    _loopStart = startSec;
+    _loopEnd = startSec + 30;
+    _loopRemaining = 5;
+    v.currentTime = startSec;
+    const p = v.play();
+    if (p && p.catch) p.catch(() => {});
+    _loopInterval = setInterval(() => {
+      const vv = video();
+      if (!vv) { cancelStampLoop(); return; }
+      if (vv.currentTime >= _loopEnd - 0.03) {
+        if (_loopRemaining > 1) {
+          _loopRemaining--;
+          vv.currentTime = _loopStart;
+          const pp = vv.play();
+          if (pp && pp.catch) pp.catch(() => {});
+          setStatus('Loop ' + (5 - _loopRemaining + 1) + '/5', '#3ea6ff');
+        } else {
+          cancelStampLoop();
+          flashStatus('Done \u2713', '#2ecc71');
+        }
+      }
+    }, 40);
+    setStatus('Loop 1/5', '#3ea6ff');
+  }
+
+  function cancelStampLoop() {
+    if (_loopInterval) { clearInterval(_loopInterval); _loopInterval = null; }
+  }
 
   // ── white noise ───────────────────────────────────────────────────────────
   let noiseCtx = null;
@@ -215,15 +264,18 @@
   // ── stamp storage ─────────────────────────────────────────────────────────
 
   function loadStamps(cb) {
-    const key = storageKey();
-    chrome.storage.local.get(key, (data) => {
-      _stamps = data[key] || [];
-      cb(_stamps);
-    });
+    // localStorage is origin-scoped (youtube.com) — shared across extensions
+    const raw = localStorage.getItem(storageKey()) || '';
+    const parts = raw.split(/[\n,]/).map(p => p.trim()).filter(p => /^\d+:\d+/.test(p));
+    _stamps = parts.map(ts => ({ ts, note: '' }));
+    cb(_stamps);
   }
 
   function saveStamps() {
-    chrome.storage.local.set({ [storageKey()]: _stamps });
+    const raw = _stamps.map(s => s.ts).join('\n');
+    localStorage.setItem(storageKey(), raw);
+    // Notify looper (same DOM, different isolated world) that stamps changed
+    document.dispatchEvent(new CustomEvent('__lmx_updated', { detail: currentVideoId() }));
   }
 
   // ── sanitize note for time(note) format ───────────────────────────────────
@@ -261,8 +313,7 @@
         font-family: 'Courier New', monospace;
       `;
       b.addEventListener('click', () => {
-        const v = video();
-        if (v) v.currentTime = parseTs(stamp.ts);
+        startStampLoop(parseTs(stamp.ts));
       });
       row.appendChild(b);
     });
@@ -302,7 +353,7 @@
     title.style.cssText = 'color:#e0e0e0; font-size:14px; font-weight:700; margin-bottom:12px;';
 
     const textarea = document.createElement('textarea');
-    textarea.placeholder = 'Paste a #? Vercel viewer URL here…';
+    textarea.placeholder = 'Paste a #? Vercel viewer URL, or plain timestamps: 1:00,2:00,3:00';
     textarea.rows = 4;
     textarea.style.cssText = `
       width: 100%;
@@ -334,46 +385,41 @@
       return b;
     }
 
+    const pasteBtn  = mkBtn('📋 Paste', '#37474f', '#e0e0e0');
     const loadBtn   = mkBtn('Load', '#3ea6ff', '#000');
     const cancelBtn = mkBtn('Cancel', '#2c3e50', '#e0e0e0');
     const statusEl  = document.createElement('span');
     statusEl.style.cssText = 'font-size:11px; color:#888; margin-left:4px;';
 
-    // YouTube link — shown after a successful load
-    const ytLink = document.createElement('a');
-    ytLink.target = '_blank';
-    ytLink.rel = 'noopener noreferrer';
-    ytLink.style.cssText = `
-      display: none;
-      font-size: 12px;
-      font-weight: 700;
-      color: #ff4e45;
-      text-decoration: none;
-      padding: 6px 12px;
-      border: 1px solid #ff4e4555;
-      border-radius: 5px;
-      white-space: nowrap;
-    `;
-    ytLink.textContent = '▶ Open on YouTube';
+    pasteBtn.addEventListener('click', () => {
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        statusEl.textContent = 'Clipboard unavailable'; statusEl.style.color = '#e74c3c'; return;
+      }
+      navigator.clipboard.readText().then(text => {
+        if (!text.trim()) { statusEl.textContent = 'Clipboard empty'; statusEl.style.color = '#e74c3c'; return; }
+        textarea.value = text.trim();
+        statusEl.textContent = 'Pasted'; statusEl.style.color = '#2ecc71';
+      }).catch(() => {
+        statusEl.textContent = 'Clipboard blocked — paste manually'; statusEl.style.color = '#e74c3c';
+      });
+    });
 
     loadBtn.addEventListener('click', () => {
       const raw = textarea.value.trim();
       if (!raw) { statusEl.textContent = 'Nothing pasted'; statusEl.style.color = '#e74c3c'; return; }
-      const { stamps, videoId } = parseHashUrl(raw);
+      const { stamps } = parseHashUrl(raw);
       if (!stamps.length) { statusEl.textContent = 'No timestamps found'; statusEl.style.color = '#e74c3c'; return; }
       _stamps = stamps;
       saveStamps();
+      updateCount();
       renderStampButtons();
       flashStatus(`Loaded ${stamps.length} timestamp${stamps.length > 1 ? 's' : ''}`, '#2ecc71');
-      if (videoId) {
-        ytLink.href = 'https://www.youtube.com/watch?v=' + videoId;
-        ytLink.style.display = 'inline-block';
-      }
+      closeImportModal();
     });
 
     cancelBtn.addEventListener('click', closeImportModal);
 
-    btnRow.append(loadBtn, cancelBtn, ytLink, statusEl);
+    btnRow.append(pasteBtn, loadBtn, cancelBtn, statusEl);
     box.append(title, textarea, btnRow);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
@@ -390,9 +436,15 @@
   // ── bar ──────────────────────────────────────────────────────────────────
 
   let _flashStatusFn = null;
+  let _setStatusFn = null;
 
   function flashStatus(msg, color) {
     if (_flashStatusFn) _flashStatusFn(msg, color);
+  }
+
+  // Like flashStatus but stays until something else clears/replaces it
+  function setStatus(msg, color) {
+    if (_setStatusFn) _setStatusFn(msg, color);
   }
 
   function injectBar() {
@@ -464,43 +516,6 @@
     const divider = document.createElement('span');
     divider.style.cssText = 'width:1px; height:20px; background:#3ea6ff44; flex-shrink:0;';
 
-    // ── note input ────────────────────────────────────────────────────────
-    const noteInput = document.createElement('input');
-    noteInput.type = 'text';
-    noteInput.placeholder = 'note (optional)';
-    noteInput.style.cssText = `
-      padding: 4px 8px;
-      border: 1px solid #3ea6ff44;
-      border-radius: 5px;
-      background: #1a1a2e;
-      color: #e0e0e0;
-      font-size: 12px;
-      width: 160px;
-      outline: none;
-    `;
-    noteInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') stampBtn.click();
-      e.stopPropagation();
-    });
-    noteInput.addEventListener('keyup',   (e) => e.stopPropagation());
-    noteInput.addEventListener('keypress',(e) => e.stopPropagation());
-
-    // ── stamp button ──────────────────────────────────────────────────────
-    const stampBtn = btn('Stamp', '#3ea6ff', '#000', 'Stamp current timestamp');
-    stampBtn.addEventListener('click', () => {
-      const v = video();
-      if (!v) { flashStatus('No video', '#e74c3c'); return; }
-      const ts = fmtTime(v.currentTime);
-      const note = noteInput.value.trim();
-      _stamps.push({ ts, note });
-      saveStamps();
-      noteInput.value = '';
-      noteInput.focus();
-      updateCount();
-      renderStampButtons();
-      flashStatus('Stamped ' + ts, '#2ecc71');
-    });
-
     // ── count label ───────────────────────────────────────────────────────
     const countSpan = document.createElement('span');
     countSpan.style.cssText = 'font-size:11px; color:#888; white-space:nowrap; min-width:24px;';
@@ -509,27 +524,10 @@
       countSpan.textContent = _stamps.length ? _stamps.length + '×' : '';
     }
 
-    // ── retrieve link button ──────────────────────────────────────────────
-    const linkBtn = btn('📋 Link', '#7B1FA2', '#fff', 'Copy share link to vercel viewer');
-    linkBtn.addEventListener('click', () => {
-      if (!_stamps.length) { flashStatus('No stamps yet', '#e74c3c'); return; }
-      const vid = currentVideoId();
-      if (!vid) { flashStatus('No video ID', '#e74c3c'); return; }
-      const videoUrl = 'https://www.youtube.com/watch?v=' + vid;
-      const timeParts = _stamps.map(e =>
-        e.note ? `${e.ts}(${sanitizeNote(e.note)})` : e.ts
-      );
-      const shareUrl = VIEWER_BASE + '#?' + videoUrl + ',' + timeParts.join(',');
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        flashStatus('Link copied!', '#2ecc71');
-      }).catch(() => {
-        flashStatus('Copy failed', '#e74c3c');
-      });
-    });
-
     // ── import button ─────────────────────────────────────────────────────
-    const importBtn = btn('📥 Import', '#1a6b3a', '#fff', 'Import timestamps from a #? Vercel URL');
+    const importBtn = btn('📥 Import', '#1a6b3a', '#fff', 'Import from a #? Vercel URL or plain timestamps (1:00,2:00,3:00)');
     importBtn.addEventListener('click', () => openImportModal());
+
 
     // ── clear button ──────────────────────────────────────────────────────
     const clearBtn = btn('✕ Clear', '#6b1a1a', '#fff', 'Clear all stamps for this video');
@@ -574,6 +572,12 @@
     statusSpan.style.cssText = 'font-size:11px; color:#888; white-space:nowrap; margin-left:4px;';
     let _statusTimer = null;
 
+    _setStatusFn = function(msg, color) {
+      if (_statusTimer) { clearTimeout(_statusTimer); _statusTimer = null; }
+      statusSpan.textContent = msg;
+      statusSpan.style.color = color;
+    };
+
     _flashStatusFn = function(msg, color) {
       statusSpan.textContent = msg;
       statusSpan.style.color = color;
@@ -596,7 +600,7 @@
       border-top: 1px solid #3ea6ff22;
     `;
 
-    bar.append(skipBack10, skipFwd10, skipFwd30, timeSpan, divider, noteInput, stampBtn, countSpan, linkBtn, importBtn, clearBtn, volDownBtn, volUpBtn, noiseBtnEl, timerBtn, statusSpan, stampsRow);
+    bar.append(skipBack10, skipFwd10, skipFwd30, timeSpan, divider, countSpan, importBtn, clearBtn, volDownBtn, volUpBtn, noiseBtnEl, timerBtn, statusSpan, stampsRow);
 
     player.parentElement.insertBefore(bar, player);
     injectSpacer();
@@ -609,8 +613,7 @@
       const idx = e.key === '0' ? 9 : (n >= 1 && n <= 9 ? n - 1 : -1);
       if (idx < 0 || !_stamps[idx]) return;
       e.preventDefault();
-      const v = video();
-      if (v) v.currentTime = parseTs(_stamps[idx].ts);
+      startStampLoop(parseTs(_stamps[idx].ts));
     };
     document.addEventListener('keydown', _kbHandler);
 
@@ -619,6 +622,16 @@
       _stamps = stamps;
       updateCount();
       renderStampButtons();
+    });
+
+    // Live-sync: refresh stamps whenever looper dispatches __lmx_updated on the DOM
+    document.addEventListener('__lmx_updated', (e) => {
+      if (e.detail && e.detail !== currentVideoId()) return;
+      loadStamps((stamps) => {
+        _stamps = stamps;
+        updateCount();
+        renderStampButtons();
+      });
     });
 
     chrome.storage.local.get('ytCtrlBarHidden', (data) => {

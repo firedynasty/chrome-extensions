@@ -6,7 +6,7 @@
 // PURE ASCII string literals: non-ASCII display chars use String.fromCharCode
 // so page charset misdetection can never mangle them.
 (function () {
-  const VERSION = 2;
+  const VERSION = 7;
   const TIP_ID  = '__ctx_tip';
   const CHIP_ID = '__ctx_chip';
 
@@ -25,10 +25,11 @@
     return;
   }
 
-  let currentText = '';
-  let doneTimer   = null;
-  let active      = true;
-  let chipStateEl = null;
+  let currentText   = '';
+  let doneTimer     = null;
+  let active        = true;
+  let chipStateEl   = null;
+  let revealPanelEl = null;
 
   function removeTooltip() {
     if (doneTimer) { clearTimeout(doneTimer); doneTimer = null; }
@@ -191,6 +192,115 @@
     chipStateEl.style.cssText = 'font-size:10px;opacity:0.85;';
     chip.appendChild(chipStateEl);
 
+    // floating reveal panel — sits just above the chip
+    revealPanelEl = document.createElement('div');
+    revealPanelEl.style.cssText = [
+      'position:fixed',
+      'bottom:56px',
+      'right:18px',
+      'z-index:2147483646',
+      'max-width:300px',
+      'min-width:160px',
+      'background:#1a1a2e',
+      'color:#ccc',
+      'border:1px solid #444',
+      'border-radius:8px',
+      'padding:8px 10px',
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+      'font-size:11px',
+      'line-height:1.5',
+      'word-break:break-word',
+      'box-shadow:0 4px 16px rgba(0,0,0,0.5)',
+      'display:none',
+      'user-select:text'
+    ].join(';');
+    revealPanelEl.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    revealPanelEl.addEventListener('mouseup',   function (e) { e.stopPropagation(); });
+    revealPanelEl.addEventListener('click',     function (e) { e.stopPropagation(); });
+    document.body.appendChild(revealPanelEl);
+
+    // textEl is the content area inside the panel — shared by Reveal and Paste.
+    let textEl = null;
+
+    function readClipboardIntoPanel() {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(function (t) {
+          if (textEl) textEl.textContent = t ? (t.length > 300 ? t.slice(0, 300) + '...' : t) : '(empty)';
+        }, function () {
+          if (textEl) textEl.textContent = '(access denied)';
+        });
+      } else {
+        if (textEl) textEl.textContent = '(clipboard API unavailable)';
+      }
+    }
+
+    function buildPanel() {
+      revealPanelEl.textContent = '';
+
+      textEl = document.createElement('div');
+      textEl.style.cssText = 'margin-bottom:8px;word-break:break-word;max-height:80px;overflow-y:auto;';
+      revealPanelEl.appendChild(textEl);
+
+      const footer = document.createElement('div');
+      footer.style.cssText = 'display:flex;gap:6px;justify-content:flex-end;';
+
+      const pasteBtn = document.createElement('button');
+      pasteBtn.style.cssText = 'background:linear-gradient(45deg,#AB47BC,#7B1FA2);color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;padding:3px 10px;cursor:pointer;';
+      pasteBtn.textContent = CLIP + ' Paste';
+      pasteBtn.addEventListener('mousedown', function (ev) { ev.stopPropagation(); });
+      pasteBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        readClipboardIntoPanel();
+      });
+      footer.appendChild(pasteBtn);
+
+      const clrBtn = document.createElement('button');
+      clrBtn.style.cssText = 'background:none;border:1px solid #555;border-radius:5px;color:#aaa;font-size:11px;padding:3px 8px;cursor:pointer;';
+      clrBtn.textContent = 'Clr';
+      clrBtn.title = 'Clear clipboard';
+      clrBtn.addEventListener('mousedown', function (ev) { ev.stopPropagation(); });
+      clrBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (textEl) textEl.textContent = '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText('');
+        }
+      });
+      footer.appendChild(clrBtn);
+
+      revealPanelEl.appendChild(footer);
+    }
+
+    // reveal button — toggles the panel; reads clipboard on open
+    const revealBtn = document.createElement('button');
+    revealBtn.style.cssText = [
+      'background:none',
+      'border:1px solid rgba(255,255,255,0.3)',
+      'border-radius:4px',
+      'color:inherit',
+      'font-size:10px',
+      'font-weight:700',
+      'cursor:pointer',
+      'padding:1px 6px',
+      'line-height:1.5',
+      'opacity:0.85'
+    ].join(';');
+    revealBtn.textContent = 'Reveal';
+    revealBtn.title = 'Show clipboard contents';
+    revealBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (revealPanelEl.style.display !== 'none') {
+        revealPanelEl.style.display = 'none';
+        revealBtn.textContent = 'Reveal';
+        return;
+      }
+      buildPanel();
+      revealPanelEl.style.display = 'block';
+      revealBtn.textContent = 'Reveal ' + CHECK;
+      readClipboardIntoPanel();
+    });
+    chip.appendChild(revealBtn);
+
     const offBtn = document.createElement('button');
     offBtn.style.cssText = 'background:none;border:none;color:inherit;font-size:12px;cursor:pointer;padding:0 0 0 4px;line-height:1;opacity:0.7;';
     offBtn.textContent = X;
@@ -239,6 +349,7 @@
     removeTooltip();
     const chip = document.getElementById(CHIP_ID);
     if (chip) chip.remove();
+    if (revealPanelEl) { revealPanelEl.remove(); revealPanelEl = null; }
     chipStateEl = null;
     if (window.__ctx && window.__ctx.deactivate === deactivate) window.__ctx = null;
   }

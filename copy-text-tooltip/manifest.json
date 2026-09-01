@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Copy Text Tooltip",
-  "version": "1.0",
+  "version": "1.4",
   "description": "Select text on any page and a tooltip appears with a one-click Copy button. Toggle on/off via the toolbar icon.",
   "permissions": ["activeTab", "scripting"],
   "background": {

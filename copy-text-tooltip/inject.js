@@ -2,17 +2,20 @@
 // Select any text and a tooltip appears beside it; click Copy to copy the text.
 // Clicking outside the tooltip dismisses it. A floating chip shows the ON/OFF
 // state — click it to pause/resume, or its x to deactivate.
+// 📋 Paste in the Reveal panel now also opens a full-screen cursive writing modal.
 //
 // PURE ASCII string literals: non-ASCII display chars use String.fromCharCode
 // so page charset misdetection can never mangle them.
 (function () {
-  const VERSION = 7;
-  const TIP_ID  = '__ctx_tip';
-  const CHIP_ID = '__ctx_chip';
+  const VERSION = 8;
+  const TIP_ID    = '__ctx_tip';
+  const CHIP_ID   = '__ctx_chip';
+  const MODAL_ID  = '__ctx_cursive_modal';
 
-  const CHECK = String.fromCharCode(0x2713);   // check mark
-  const X     = String.fromCharCode(0x2715);   // x (close)
-  const CLIP  = String.fromCodePoint(0x1F4CB); // clipboard
+  const CHECK = String.fromCharCode(0x2713);   // ✓
+  const X     = String.fromCharCode(0x2715);   // ✕
+  const CLIP  = String.fromCodePoint(0x1F4CB); // 📋
+  const STAR  = String.fromCharCode(0x2726);   // ✦
 
   // Version upgrade: tear down stale instance.
   if (window.__ctx && window.__ctx.version !== VERSION) {
@@ -25,11 +28,169 @@
     return;
   }
 
+  // ---- load cursive font once ----
+  if (!document.getElementById('__ctx_cursive_font')) {
+    const link = document.createElement('link');
+    link.id   = '__ctx_cursive_font';
+    link.rel  = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Alex+Brush&display=swap';
+    document.head.appendChild(link);
+  }
+
   let currentText   = '';
   let doneTimer     = null;
+  let cursiveTimer  = null;
   let active        = true;
   let chipStateEl   = null;
   let revealPanelEl = null;
+
+  // ---- cursive modal ----
+
+  function animateCursiveWords(text, outputEl) {
+    if (cursiveTimer) { clearTimeout(cursiveTimer); cursiveTimer = null; }
+    outputEl.innerHTML = '';
+    const words = text.split(/\s+/).filter(Boolean);
+    const spans = words.map(function (word, i) {
+      const sp = document.createElement('span');
+      sp.style.cssText = 'display:inline;opacity:0;transition:opacity 320ms ease;';
+      sp.textContent = i < words.length - 1 ? word + ' ' : word;
+      outputEl.appendChild(sp);
+      return sp;
+    });
+    let i = 0;
+    function next() {
+      if (i >= spans.length) { cursiveTimer = null; return; }
+      spans[i].style.opacity = '1';
+      i++;
+      cursiveTimer = setTimeout(next, 160);
+    }
+    next();
+  }
+
+  function removeCursiveModal() {
+    if (cursiveTimer) { clearTimeout(cursiveTimer); cursiveTimer = null; }
+    const m = document.getElementById(MODAL_ID);
+    if (m) m.remove();
+  }
+
+  function showCursiveModal(text) {
+    removeCursiveModal();
+
+    // backdrop
+    const backdrop = document.createElement('div');
+    backdrop.id = MODAL_ID;
+    backdrop.style.cssText = [
+      'position:fixed',
+      'top:0', 'left:0', 'right:0', 'bottom:0',
+      'z-index:2147483647',
+      'background:rgba(0,0,0,0.6)',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+    ].join(';');
+    backdrop.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    backdrop.addEventListener('click', function (e) {
+      if (e.target === backdrop) removeCursiveModal();
+    });
+
+    // card
+    const card = document.createElement('div');
+    card.style.cssText = [
+      'width:85vw',
+      'max-width:920px',
+      'max-height:85vh',
+      'display:flex',
+      'flex-direction:column',
+      'background:#f5f0e8',
+      'background-image:repeating-linear-gradient(transparent,transparent 79px,#c9b99a 79px,#c9b99a 80px)',
+      'border:2px solid #c9b99a',
+      'border-radius:16px',
+      'box-shadow:0 16px 56px rgba(0,0,0,0.45)',
+      'overflow:hidden',
+    ].join(';');
+    card.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    // toolbar
+    const toolbar = document.createElement('div');
+    toolbar.style.cssText = [
+      'display:flex',
+      'align-items:center',
+      'gap:8px',
+      'padding:10px 16px',
+      'background:linear-gradient(135deg,#AB47BC,#7B1FA2)',
+      'flex-shrink:0',
+    ].join(';');
+
+    const title = document.createElement('span');
+    title.style.cssText = 'color:#fff;font-weight:700;font-size:13px;flex:1;letter-spacing:0.03em;';
+    title.textContent = STAR + ' Cursive Clipboard';
+    toolbar.appendChild(title);
+
+    // Page-down button
+    const pgDnBtn = document.createElement('button');
+    pgDnBtn.style.cssText = [
+      'background:rgba(255,255,255,0.15)',
+      'border:1px solid rgba(255,255,255,0.35)',
+      'border-radius:6px',
+      'color:#fff',
+      'font-size:14px',
+      'cursor:pointer',
+      'padding:3px 12px',
+      'line-height:1',
+    ].join(';');
+    pgDnBtn.textContent = String.fromCharCode(0x21A7); // ↧
+    pgDnBtn.title = 'Page down';
+    pgDnBtn.addEventListener('click', function () {
+      scrollArea.scrollBy({ top: scrollArea.clientHeight * 0.85, behavior: 'smooth' });
+    });
+    toolbar.appendChild(pgDnBtn);
+
+    // Nudge-up button — small step back for when page-down overshoots
+    const nudgeUpBtn = document.createElement('button');
+    nudgeUpBtn.style.cssText = [
+      'background:rgba(255,255,255,0.15)',
+      'border:1px solid rgba(255,255,255,0.35)',
+      'border-radius:6px',
+      'color:#fff',
+      'font-size:14px',
+      'cursor:pointer',
+      'padding:3px 12px',
+      'line-height:1',
+    ].join(';');
+    nudgeUpBtn.textContent = String.fromCharCode(0x2191); // ↑
+    nudgeUpBtn.title = 'Nudge up';
+    nudgeUpBtn.addEventListener('click', function () {
+      scrollArea.scrollBy({ top: -(scrollArea.clientHeight * 0.25), behavior: 'smooth' });
+    });
+    toolbar.appendChild(nudgeUpBtn);
+
+    card.appendChild(toolbar);
+
+    // scroll area
+    const scrollArea = document.createElement('div');
+    scrollArea.style.cssText = 'flex:1;overflow-y:auto;padding:36px 52px;';
+
+    const outputEl = document.createElement('div');
+    outputEl.style.cssText = [
+      'font-family:"Alex Brush",cursive',
+      'font-size:80px',
+      'line-height:1.55',
+      'color:#1a1209',
+      'word-break:break-word',
+      'min-height:100px',
+    ].join(';');
+
+    scrollArea.appendChild(outputEl);
+    card.appendChild(scrollArea);
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+
+    // start animation
+    animateCursiveWords(text, outputEl);
+  }
+
+  // ---- tooltip ----
 
   function removeTooltip() {
     if (doneTimer) { clearTimeout(doneTimer); doneTimer = null; }
@@ -97,19 +258,15 @@
       'line-height:1.45'
     ].join(';');
 
-    // Shield page handlers from presses inside the tooltip; preventDefault on
-    // mousedown keeps the page selection from collapsing before Copy is clicked.
     tip.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
     tip.addEventListener('mouseup',   function (e) { e.stopPropagation(); });
     tip.addEventListener('click',     function (e) { e.stopPropagation(); });
 
-    // preview of the selected text
     const preview = document.createElement('div');
     preview.style.cssText = 'color:#bbb;margin-bottom:8px;padding-right:16px;word-break:break-word;';
     preview.textContent = text.length > 90 ? text.slice(0, 90) + '...' : text;
     tip.appendChild(preview);
 
-    // footer: char count + copy button
     const footer = document.createElement('div');
     footer.style.cssText = 'display:flex;align-items:center;gap:8px;';
 
@@ -130,9 +287,18 @@
       });
     });
     footer.appendChild(copyBtn);
+
+    const cursiveBtn = document.createElement('button');
+    cursiveBtn.style.cssText = 'background:linear-gradient(45deg,#AB47BC,#7B1FA2);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;padding:4px 14px;cursor:pointer;';
+    cursiveBtn.textContent = STAR + 'Cursive';
+    cursiveBtn.addEventListener('click', function () {
+      removeTooltip();
+      showCursiveModal(currentText);
+    });
+    footer.appendChild(cursiveBtn);
+
     tip.appendChild(footer);
 
-    // close button
     const closeBtn = document.createElement('button');
     closeBtn.style.cssText = 'position:absolute;top:5px;right:7px;background:none;border:none;color:#777;font-size:12px;cursor:pointer;padding:2px 4px;line-height:1;';
     closeBtn.textContent = X;
@@ -175,7 +341,6 @@
       'user-select:none'
     ].join(';');
 
-    // Pressing the chip must not collapse a selection or reach page handlers.
     chip.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
     chip.addEventListener('mouseup',   function (e) { e.stopPropagation(); });
     chip.addEventListener('click',     function (e) { e.stopPropagation(); });
@@ -192,7 +357,7 @@
     chipStateEl.style.cssText = 'font-size:10px;opacity:0.85;';
     chip.appendChild(chipStateEl);
 
-    // floating reveal panel — sits just above the chip
+    // floating reveal panel
     revealPanelEl = document.createElement('div');
     revealPanelEl.style.cssText = [
       'position:fixed',
@@ -219,7 +384,6 @@
     revealPanelEl.addEventListener('click',     function (e) { e.stopPropagation(); });
     document.body.appendChild(revealPanelEl);
 
-    // textEl is the content area inside the panel — shared by Reveal and Paste.
     let textEl = null;
 
     function readClipboardIntoPanel() {
@@ -244,6 +408,7 @@
       const footer = document.createElement('div');
       footer.style.cssText = 'display:flex;gap:6px;justify-content:flex-end;';
 
+      // 📋 Paste — refresh panel text AND open cursive modal
       const pasteBtn = document.createElement('button');
       pasteBtn.style.cssText = 'background:linear-gradient(45deg,#AB47BC,#7B1FA2);color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;padding:3px 10px;cursor:pointer;';
       pasteBtn.textContent = CLIP + ' Paste';
@@ -251,13 +416,19 @@
       pasteBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
         readClipboardIntoPanel();
+        // Also launch the cursive modal
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          navigator.clipboard.readText().then(function (t) {
+            if (t) showCursiveModal(t);
+          }, function () {});
+        }
       });
       footer.appendChild(pasteBtn);
 
       const clrBtn = document.createElement('button');
       clrBtn.style.cssText = 'background:none;border:1px solid #555;border-radius:5px;color:#aaa;font-size:11px;padding:3px 8px;cursor:pointer;';
       clrBtn.textContent = 'Clr';
-      clrBtn.title = 'Clear clipboard';
+      clrBtn.title = 'Clear display and clipboard';
       clrBtn.addEventListener('mousedown', function (ev) { ev.stopPropagation(); });
       clrBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
@@ -271,7 +442,7 @@
       revealPanelEl.appendChild(footer);
     }
 
-    // reveal button — toggles the panel; reads clipboard on open
+    // Reveal button — toggles panel; reads clipboard on open
     const revealBtn = document.createElement('button');
     revealBtn.style.cssText = [
       'background:none',
@@ -323,8 +494,9 @@
   function onMouseUp(e) {
     if (!active) return;
     if (e.target && e.target.closest) {
-      if (e.target.closest('#' + TIP_ID)) return;
-      if (e.target.closest('#' + CHIP_ID)) return;
+      if (e.target.closest('#' + TIP_ID))   return;
+      if (e.target.closest('#' + CHIP_ID))  return;
+      if (e.target.closest('#' + MODAL_ID)) return;
     }
     const sel  = window.getSelection();
     const text = sel ? sel.toString().trim() : '';
@@ -332,9 +504,6 @@
     showTooltip(e.clientX, e.clientY, text);
   }
 
-  // Click outside the tooltip closes it; clicks inside it are ignored.
-  // mousedown in capture phase so dismissal is immediate and page handlers
-  // cannot intercept the event first.
   function onDocMouseDown(e) {
     if (!document.getElementById(TIP_ID)) return;
     if (e.target && e.target.closest && e.target.closest('#' + TIP_ID)) return;
@@ -347,6 +516,7 @@
     document.removeEventListener('mouseup', onMouseUp);
     document.removeEventListener('mousedown', onDocMouseDown, true);
     removeTooltip();
+    removeCursiveModal();
     const chip = document.getElementById(CHIP_ID);
     if (chip) chip.remove();
     if (revealPanelEl) { revealPanelEl.remove(); revealPanelEl = null; }

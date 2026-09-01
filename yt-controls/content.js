@@ -21,8 +21,14 @@
     const v = video();
     if (!v) { flashStatus('No video', '#e74c3c'); return; }
     v.muted = false;
-    v.volume = Math.max(0, Math.min(1, Math.round((v.volume + delta) * 100) / 100));
-    flashStatus('Vol ' + Math.round(v.volume * 100) + '%', '#2ecc71');
+    const newVol = Math.max(0, Math.min(1, Math.round((v.volume + delta) * 100) / 100));
+    v.volume = newVol;
+    // Also tell YouTube's player so it doesn't override us after a few minutes
+    const player = document.querySelector('#movie_player');
+    if (player && typeof player.setVolume === 'function') {
+      player.setVolume(Math.round(newVol * 100));
+    }
+    flashStatus('Vol ' + Math.round(newVol * 100) + '%', '#2ecc71');
   }
 
   function fmtTime(sec) {
@@ -70,6 +76,116 @@
   let _timeInterval = null;
   let _stamps = [];
   let _kbHandler = null;
+
+  // ── white noise ───────────────────────────────────────────────────────────
+  let noiseCtx = null;
+  let noiseGain = null;
+  let noiseSource = null;
+  let whiteNoiseActive = false;
+  const NOISE_VOLUME = 0.01; // 1%
+
+  function initWhiteNoise() {
+    if (noiseCtx) return;
+    noiseCtx = new AudioContext();
+    const buf = noiseCtx.createBuffer(1, noiseCtx.sampleRate * 2, noiseCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    noiseSource = noiseCtx.createBufferSource();
+    noiseSource.buffer = buf;
+    noiseSource.loop = true;
+    noiseGain = noiseCtx.createGain();
+    noiseGain.gain.value = 0;
+    noiseSource.connect(noiseGain);
+    noiseGain.connect(noiseCtx.destination);
+    noiseSource.start();
+  }
+
+  function toggleWhiteNoise(noiseBtn) {
+    initWhiteNoise();
+    if (noiseCtx.state === 'suspended') noiseCtx.resume();
+    whiteNoiseActive = !whiteNoiseActive;
+    noiseGain.gain.value = whiteNoiseActive ? NOISE_VOLUME : 0;
+    noiseBtn.style.background = whiteNoiseActive ? '#c9a84c' : '#37474f';
+    noiseBtn.style.color = whiteNoiseActive ? '#1a1a2e' : '#fff';
+    flashStatus(whiteNoiseActive ? 'Noise on (1%)' : 'Noise off', '#888');
+  }
+
+  // ── 30-second repeat timer ────────────────────────────────────────────────
+  const T3_DURATION_MS = 30000;
+  const T3_TOTAL_LOOPS = 10;
+  const T3_FADE_MS = 2000;
+  let t3Timeout = null;
+  let t3LoopsRemaining = 0;
+  let t3StartTime = 0;
+  let t3SavedVolume = 1;
+  let t3Generation = 0;
+
+  function fadeVolTo(target, durationMs, gen) {
+    return new Promise(resolve => {
+      const v = video();
+      if (!v) { resolve(); return; }
+      const startVol = v.volume;
+      const steps = 20;
+      let i = 0;
+      const iv = setInterval(() => {
+        if (gen !== t3Generation) { clearInterval(iv); resolve(); return; }
+        i++;
+        const v2 = video();
+        if (v2) v2.volume = Math.max(0, Math.min(1, startVol + (target - startVol) * (i / steps)));
+        if (i >= steps) { clearInterval(iv); resolve(); }
+      }, durationMs / steps);
+    });
+  }
+
+  function cancelT3(timerBtn) {
+    t3Generation++;
+    if (t3Timeout) { clearTimeout(t3Timeout); t3Timeout = null; }
+    const v = video();
+    if (v) v.volume = t3SavedVolume;
+    const player = document.querySelector('#movie_player');
+    if (player && typeof player.setVolume === 'function') player.setVolume(Math.round(t3SavedVolume * 100));
+    timerBtn.textContent = '⏱️ 30s';
+    timerBtn.style.background = 'linear-gradient(45deg,#ff9800,#f57c00)';
+    flashStatus('Timer cancelled', '#e74c3c');
+  }
+
+  function runT3Loop(timerBtn, gen) {
+    const currentLoop = T3_TOTAL_LOOPS - t3LoopsRemaining + 1;
+    timerBtn.textContent = `⏹️ ${currentLoop}/${T3_TOTAL_LOOPS}`;
+    flashStatus(`30s loop ${currentLoop}/${T3_TOTAL_LOOPS}`, '#ff9800');
+    t3Timeout = setTimeout(async () => {
+      if (gen !== t3Generation) return;
+      await fadeVolTo(0, T3_FADE_MS, gen);
+      if (gen !== t3Generation) return;
+      t3LoopsRemaining--;
+      const v = video(); if (v) v.currentTime = t3StartTime;
+      if (t3LoopsRemaining > 0) {
+        await fadeVolTo(t3SavedVolume, 1000, gen);
+        if (gen !== t3Generation) return;
+        runT3Loop(timerBtn, gen);
+      } else {
+        t3Timeout = null;
+        const v2 = video();
+        if (v2) v2.volume = t3SavedVolume;
+        const player = document.querySelector('#movie_player');
+        if (player && typeof player.setVolume === 'function') player.setVolume(Math.round(t3SavedVolume * 100));
+        timerBtn.textContent = '⏱️ 30s';
+        timerBtn.style.background = 'linear-gradient(45deg,#ff9800,#f57c00)';
+        flashStatus(`30s complete (${T3_TOTAL_LOOPS}/${T3_TOTAL_LOOPS})`, '#2ecc71');
+      }
+    }, T3_DURATION_MS - T3_FADE_MS);
+  }
+
+  function toggleT3(timerBtn) {
+    if (t3Timeout) { cancelT3(timerBtn); return; }
+    const v = video();
+    if (!v) { flashStatus('No video', '#e74c3c'); return; }
+    t3StartTime = v.currentTime;
+    t3SavedVolume = v.volume || 1;
+    t3LoopsRemaining = T3_TOTAL_LOOPS;
+    t3Generation++;
+    runT3Loop(timerBtn, t3Generation);
+  }
 
   function startTimeClock(spanEl) {
     stopTimeClock();
@@ -419,6 +535,27 @@
     volDownBtn.addEventListener('click', () => changeVolume(-0.1));
     volUpBtn  .addEventListener('click', () => changeVolume(+0.1));
 
+    // ── white noise button ────────────────────────────────────────────────
+    const noiseBtnEl = btn('🌊(1%)', '#37474f', '#fff', 'Toggle white noise at 1%');
+    noiseBtnEl.addEventListener('click', () => toggleWhiteNoise(noiseBtnEl));
+
+    // ── 30s timer button ──────────────────────────────────────────────────
+    const timerBtn = document.createElement('button');
+    timerBtn.textContent = '⏱️ 30s';
+    timerBtn.title = 'Play 30s, rewind, repeat x10';
+    timerBtn.style.cssText = `
+      padding: 5px 12px;
+      border: none;
+      border-radius: 5px;
+      background: linear-gradient(45deg,#ff9800,#f57c00);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    `;
+    timerBtn.addEventListener('click', () => toggleT3(timerBtn));
+
     // ── status flash ──────────────────────────────────────────────────────
     const statusSpan = document.createElement('span');
     statusSpan.style.cssText = 'font-size:11px; color:#888; white-space:nowrap; margin-left:4px;';
@@ -446,7 +583,7 @@
       border-top: 1px solid #3ea6ff22;
     `;
 
-    bar.append(skipBack10, skipFwd10, skipFwd30, timeSpan, divider, noteInput, stampBtn, countSpan, linkBtn, importBtn, clearBtn, volDownBtn, volUpBtn, statusSpan, stampsRow);
+    bar.append(skipBack10, skipFwd10, skipFwd30, timeSpan, divider, noteInput, stampBtn, countSpan, linkBtn, importBtn, clearBtn, volDownBtn, volUpBtn, noiseBtnEl, timerBtn, statusSpan, stampsRow);
 
     player.parentElement.insertBefore(bar, player);
     injectSpacer();
@@ -492,6 +629,7 @@
     stopTimeClock();
     _flashStatusFn = null;
     if (_kbHandler) { document.removeEventListener('keydown', _kbHandler); _kbHandler = null; }
+    if (t3Timeout) { clearTimeout(t3Timeout); t3Timeout = null; t3Generation++; }
     document.getElementById(MODAL_ID)?.remove();
     document.getElementById(BAR_ID)?.remove();
     document.getElementById(SPACER_ID)?.remove();

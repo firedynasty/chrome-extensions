@@ -179,7 +179,7 @@
   </div>
   <div id="trackTitle">Click play to start</div>
   <div id="ytLink" style="text-align:center; margin-bottom:4px; display:none;">
-    <a id="ytAnchor" href="#" target="_blank"
+    <a id="ytAnchor" href="#"
        style="color:#FF4040; font-size:11px; text-decoration:none; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
       &#9654; YouTube
     </a>
@@ -193,26 +193,9 @@
       &#9654; Famous Beats Maker
     </a>
   </div>
-  <div class="volume-row">
-    <span>&#128264;</span>
-    <input type="range" id="volume" min="0" max="100" value="80">
-    <span>&#128266;</span>
-  </div>
-  <div class="volume-row">
-    <span style="font-size:11px; color:#81C784; font-weight:600;">Speed (,/.)</span>
-    <button id="rateDown" style="flex:0 0 auto; padding:4px 10px; font-size:12px;">&laquo;</button>
-    <span id="rateLabel" style="flex:1; text-align:center; font-size:12px; color:#c9a84c;">1x</span>
-    <button id="rateUp" style="flex:0 0 auto; padding:4px 10px; font-size:12px;">&raquo;</button>
-  </div>
-  <div id="progress-bar"><div id="progress-fill"></div></div>
-  <div id="timeDisplay">0:00 / 0:00</div>
-  <div class="btn-row">
-    <button id="shuffleBtn" title="Shuffle">&#128256;</button>
-    <button id="noiseBtn" title="White Noise">&#127754;</button>
-    <button id="timer3minBtn" title="Play 30s, rewind, repeat x10" style="background:linear-gradient(45deg,#ff9800,#f57c00);padding:6px 12px;font-size:12px">⏱️ 30s</button>
-  </div>
+  <div id="trackList"></div>
   <div class="volume-row" style="margin-bottom:8px;">
-    <span style="font-size:13px;">&#127754;</span>
+    <button id="noiseBtn" title="White Noise" style="flex:0 0 auto; padding:4px 10px; font-size:13px; background:#2c3e50; color:#fff;">&#127754;</button>
     <button id="noiseVolDown" style="flex:0 0 auto; padding:4px 10px; font-size:12px;">&#8722;</button>
     <span id="noiseVolLabel" style="flex:1; text-align:center; font-size:12px; color:#888;">1%</span>
     <button id="noiseVolUp" style="flex:0 0 auto; padding:4px 10px; font-size:12px;">+</button>
@@ -254,7 +237,6 @@
     <div id="playlistStatus" style="font-size:10px; color:#666; text-align:center; min-height:12px; margin-top:2px;"></div>
   </div>
 
-  <div id="trackList"></div>
   <div id="status"></div>
   <script src="popup.js"></script>
 </body>

@@ -1,26 +1,57 @@
-const shuffleBtn = document.getElementById('shuffleBtn');
 const noiseBtn = document.getElementById('noiseBtn');
 const noiseVolLabel = document.getElementById('noiseVolLabel');
 let noiseVolPct = 1;
-const volumeSlider = document.getElementById('volume');
 const trackTitle = document.getElementById('trackTitle');
-const progressBar = document.getElementById('progress-bar');
-const progressFill = document.getElementById('progress-fill');
-const timeDisplay = document.getElementById('timeDisplay');
 const statusEl = document.getElementById('status');
 const trackListEl = document.getElementById('trackList');
 const genreSelect = document.getElementById('genreSelect');
 const albumSelect = document.getElementById('albumSelect');
-const rateLabel = document.getElementById('rateLabel');
-const rateDownBtn = document.getElementById('rateDown');
-const rateUpBtn = document.getElementById('rateUp');
-const timer3minBtn = document.getElementById('timer3minBtn');
 const ytLink = document.getElementById('ytLink');
 const ytAnchor = document.getElementById('ytAnchor');
+ytAnchor.addEventListener('click', (e) => {
+  e.preventDefault();
+  const url = ytAnchor.href;
+  if (url && url !== location.href) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) chrome.tabs.update(tabs[0].id, { url });
+    });
+  }
+});
 
-const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-let currentRate = 1;
 let currentPlaylists = null;
+
+function renderTrackList(tracks) {
+  trackListEl.innerHTML = tracks.map((t, i) => {
+    const title = typeof t === 'object' ? t.title : t;
+    const ytId  = typeof t === 'object' ? (t.youtubeId || '') : '';
+    const secs  = typeof t === 'object' ? (t.seconds || 0) : 0;
+    return `<div class="track-item" data-index="${i}" data-ytid="${ytId}" data-secs="${Math.floor(secs)}">${title}</div>`;
+  }).join('');
+  trackListEl.querySelectorAll('.track-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const ytId = el.dataset.ytid;
+      const secs = el.dataset.secs || '0';
+      if (ytId) {
+        const url = `https://www.youtube.com/watch?v=${ytId}&t=${secs}s`;
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]) chrome.tabs.update(tabs[0].id, { url });
+        });
+      }
+    });
+  });
+}
+
+function loadTrackListForAlbum() {
+  const genre = genreSelect.value;
+  const idx = parseInt(albumSelect.value) || 0;
+  const entry = currentPlaylists && (currentPlaylists[genre] || [])[idx];
+  if (!entry) return;
+  if (entry.tracks && entry.tracks.length > 0) {
+    renderTrackList(entry.tracks.map(t => ({ title: t.title, youtubeId: entry.youtubeId, seconds: t.seconds || 0 })));
+  } else {
+    renderTrackList([{ title: entry.name, youtubeId: entry.youtubeId, seconds: 0 }]);
+  }
+}
 
 function showYouTubeLinkForAlbum() {
   const genre = genreSelect.value;
@@ -37,12 +68,6 @@ function showYouTubeLinkForAlbum() {
   }
 }
 
-function formatTime(secs) {
-  if (isNaN(secs)) return '0:00';
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 function applyState(state) {
   if (!state || state.type !== 'stateUpdate') return;
@@ -51,17 +76,7 @@ function applyState(state) {
   if (state.youtubeId) {
     ytAnchor.href = `https://www.youtube.com/watch?v=${state.youtubeId}`;
     ytLink.style.display = 'block';
-  } else {
-    ytLink.style.display = 'none';
   }
-  if (state.shuffleMode) {
-    shuffleBtn.style.background = '#c9a84c';
-    shuffleBtn.style.color = '#1a1a2e';
-  } else {
-    shuffleBtn.style.background = '#2c3e50';
-    shuffleBtn.style.color = '#fff';
-  }
-
   if (state.whiteNoise) {
     noiseBtn.style.background = '#c9a84c';
     noiseBtn.style.color = '#1a1a2e';
@@ -75,29 +90,7 @@ function applyState(state) {
     noiseVolLabel.textContent = state.noiseVolume + '%';
   }
 
-  volumeSlider.value = state.volume;
 
-  if (state.playbackRate !== undefined) {
-    currentRate = state.playbackRate;
-    rateLabel.textContent = state.playbackRate + 'x';
-  }
-
-  if (state.timer3min && state.timer3min.active) {
-    timer3minBtn.textContent = `⏹️ ${state.timer3min.currentLoop}/${state.timer3min.totalLoops}`;
-    timer3minBtn.style.background = 'linear-gradient(45deg, #FF5722, #E64A19)';
-  } else {
-    timer3minBtn.textContent = '⏱️ 30s';
-    timer3minBtn.style.background = 'linear-gradient(45deg,#ff9800,#f57c00)';
-  }
-
-  if (state.duration) {
-    const pct = (state.currentTime / state.duration) * 100;
-    progressFill.style.width = pct + '%';
-    timeDisplay.textContent = `${formatTime(state.currentTime)} / ${formatTime(state.duration)}`;
-  } else {
-    progressFill.style.width = '0%';
-    timeDisplay.textContent = '0:00 / 0:00';
-  }
 
   statusEl.textContent = state.status || '';
 
@@ -111,25 +104,9 @@ function applyState(state) {
     albumSelect.value = state.currentAlbumIndex;
   }
 
-  if (state.tracks) {
-    trackListEl.innerHTML = state.tracks.map((t, i) => {
-      const title = typeof t === 'object' ? t.title : t;
-      const ytId  = typeof t === 'object' ? t.youtubeId : '';
-      const secs  = typeof t === 'object' ? (t.seconds || 0) : 0;
-      return `<div class="track-item${i === state.currentIndex ? ' active' : ''}" data-index="${i}" data-ytid="${ytId}" data-secs="${Math.floor(secs)}">${title}</div>`;
-    }).join('');
-    trackListEl.querySelectorAll('.track-item').forEach(el => {
-      el.addEventListener('click', () => {
-        const ytId = el.dataset.ytid;
-        const secs = el.dataset.secs || '0';
-        if (ytId) {
-          const url = `https://www.youtube.com/watch?v=${ytId}&t=${secs}s`;
-          navigator.clipboard.writeText(url).then(() => {
-            statusEl.textContent = 'Copied!';
-            setTimeout(() => { statusEl.textContent = ''; }, 1500);
-          }).catch(() => {});
-        }
-      });
+  if (state.currentIndex >= 0) {
+    trackListEl.querySelectorAll('.track-item').forEach((el, i) => {
+      el.classList.toggle('active', i === state.currentIndex);
     });
   }
 }
@@ -172,12 +149,14 @@ async function initDropdowns() {
       loadAlbumOptions(genreSelect.value);
       chrome.storage.local.set({ bachGenre: genreSelect.value, bachAlbum: 0 });
       send({ type: 'switchGenre', name: genreSelect.value });
+      loadTrackListForAlbum();
       showYouTubeLinkForAlbum();
     });
 
     albumSelect.addEventListener('change', () => {
       chrome.storage.local.set({ bachAlbum: parseInt(albumSelect.value) });
       send({ type: 'switchAlbum', index: parseInt(albumSelect.value) });
+      loadTrackListForAlbum();
       showYouTubeLinkForAlbum();
     });
 
@@ -189,13 +168,13 @@ async function initDropdowns() {
     if (saved.bachAlbum !== undefined) {
       albumSelect.value = saved.bachAlbum;
     }
+    loadTrackListForAlbum();
     showYouTubeLinkForAlbum();
   } catch (e) {
     statusEl.textContent = 'Error loading playlists';
   }
 }
 
-shuffleBtn.addEventListener('click', () => send({ type: 'shuffle' }));
 noiseBtn.addEventListener('click', () => send({ type: 'toggleNoise' }));
 
 function adjustNoiseVol(delta) {
@@ -205,16 +184,6 @@ function adjustNoiseVol(delta) {
 }
 document.getElementById('noiseVolDown').addEventListener('click', () => adjustNoiseVol(-1));
 document.getElementById('noiseVolUp').addEventListener('click', () => adjustNoiseVol(1));
-volumeSlider.addEventListener('input', () => {
-  send({ type: 'volume', value: parseInt(volumeSlider.value) });
-});
-
-progressBar.addEventListener('click', (e) => {
-  const rect = progressBar.getBoundingClientRect();
-  const fraction = (e.clientX - rect.left) / rect.width;
-  send({ type: 'seek', fraction });
-});
-
 // Listen for state broadcasts from offscreen
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'stateUpdate') {
@@ -224,35 +193,6 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
-function adjustVolume(delta) {
-  volumeSlider.value = Math.min(100, Math.max(0, parseInt(volumeSlider.value) + delta));
-  send({ type: 'volume', value: parseInt(volumeSlider.value) });
-}
-
-function stepRate(delta) {
-  let i = RATES.indexOf(currentRate);
-  if (i === -1) i = RATES.indexOf(1);
-  i = Math.min(RATES.length - 1, Math.max(0, i + delta));
-  currentRate = RATES[i];
-  rateLabel.textContent = currentRate + 'x';
-  send({ type: 'rate', value: currentRate });
-}
-
-rateDownBtn.addEventListener('click', () => stepRate(-1));
-rateUpBtn.addEventListener('click', () => stepRate(1));
-timer3minBtn.addEventListener('click', () => send({ type: 'timer3minToggle' }));
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === '=' || e.key === '+') {
-    adjustVolume(5);
-  } else if (e.key === '-' || e.key === '_') {
-    adjustVolume(-5);
-  } else if (e.key === ',') {
-    stepRate(-1);
-  } else if (e.key === '.') {
-    stepRate(1);
-  }
-});
 
 document.getElementById('accessLinkBtn').addEventListener('click', showYouTubeLinkForAlbum);
 

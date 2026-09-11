@@ -10,17 +10,20 @@ async function ensureOffscreen() {
     });
     // Give the offscreen doc a moment to register its listener
     await new Promise(r => setTimeout(r, 200));
-    const { bachPlaylists } = await chrome.storage.local.get('bachPlaylists');
+    const { bachPlaylists, natureMix } = await chrome.storage.local.get(['bachPlaylists', 'natureMix']);
     if (bachPlaylists) {
       chrome.runtime.sendMessage({ target: 'offscreen', type: 'loadPlaylists', playlists: bachPlaylists }).catch(() => {});
+    }
+    if (natureMix) {
+      chrome.runtime.sendMessage({ target: 'offscreen', type: 'natureLoadState', isPlaying: natureMix.isPlaying, volumes: natureMix.volumes, activeGroup: natureMix.activeGroup }).catch(() => {});
     }
   }
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Only handle messages from popup (no target field yet).
-  // stateUpdate and beatsStep are broadcasts from offscreen → popup; leave them alone.
-  if (msg.target === 'offscreen' || msg.type === 'stateUpdate' || msg.type === 'beatsStep') return;
+  // stateUpdate is a broadcast from offscreen → popup; leave it alone.
+  if (msg.target === 'offscreen' || msg.type === 'stateUpdate') return;
 
   ensureOffscreen().then(() => {
     const forward = { ...msg, target: 'offscreen' };

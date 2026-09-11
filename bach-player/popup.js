@@ -109,6 +109,43 @@ function applyState(state) {
       el.classList.toggle('active', i === state.currentIndex);
     });
   }
+
+  if (state.natureIsPlaying !== undefined) {
+    const btn = document.getElementById('natureToggleBtn');
+    if (btn) {
+      btn.textContent = state.natureIsPlaying ? '⏸' : '▶';
+      btn.style.background = state.natureIsPlaying ? '#555' : '#c9a84c';
+      btn.style.color = state.natureIsPlaying ? '#fff' : '#1a1a2e';
+    }
+  }
+  if (state.natureVolumes !== undefined) {
+    NATURE_TRACK_IDS.forEach(id => {
+      const sl = document.getElementById(NATURE_SLIDER_IDS[id]);
+      if (sl && state.natureVolumes[id] !== undefined) sl.value = state.natureVolumes[id];
+    });
+  }
+  if (state.natureErrors !== undefined) {
+    NATURE_TRACK_IDS.forEach(id => {
+      const err = document.getElementById(NATURE_ERROR_IDS[id]);
+      if (err) err.style.display = state.natureErrors[id] ? 'inline' : 'none';
+    });
+  }
+  if (state.natureActiveGroup !== undefined) {
+    natureActiveGroup = state.natureActiveGroup;
+    const forestBtn = document.getElementById('natureGroupForestBtn');
+    const stormBtn = document.getElementById('natureGroupStormBtn');
+    const active = { background: '#c9a84c', color: '#1a1a2e' };
+    const inactive = { background: '#16213e', color: '#888' };
+    if (forestBtn) Object.assign(forestBtn.style, natureActiveGroup === 'forest' ? active : inactive);
+    if (stormBtn) Object.assign(stormBtn.style, natureActiveGroup === 'storm' ? active : inactive);
+    NATURE_TRACK_IDS.forEach(id => {
+      const row = document.getElementById(NATURE_ROW_IDS[id]);
+      if (row) row.style.opacity = (NATURE_TRACK_GROUP[id] === natureActiveGroup) ? '1' : '0.4';
+    });
+  }
+  if (state.natureIsPlaying !== undefined || state.natureVolumes !== undefined || state.natureActiveGroup !== undefined) {
+    saveNatureMixState();
+  }
 }
 
 async function send(msg) {
@@ -188,8 +225,6 @@ document.getElementById('noiseVolUp').addEventListener('click', () => adjustNois
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'stateUpdate') {
     applyState(msg);
-  } else if (msg.type === 'beatsStep') {
-    beatsMarkStep(msg.stepIdx);
   }
 });
 
@@ -202,255 +237,64 @@ initDropdowns().then(() => {
   setTimeout(() => send({ type: 'getState' }), 300);
 });
 
-// ── Beats Maker ──────────────────────────────────────────────────────────────
+// ── Nature Sounds Mixer ──────────────────────────────────────────────────────
 
-const BEATS_TRACKS = ['kick','snare','hat','crash','tone'];
-const BEATS_LABELS = {kick:'Kick',snare:'Snare',hat:'Hat',crash:'Gong',tone:'Tone'};
-const BEATS_COLORS = {
-  kick:'#c9a84c', snare:'#e74c3c', hat:'#7fa695', crash:'#8a8f9c', tone:'#c9b25e'
+const NATURE_TRACK_IDS = ['rain', 'birds', 'wind', 'thunder', 'ocean'];
+const NATURE_SLIDER_IDS = {
+  rain: 'natureVolRain', birds: 'natureVolBirds', wind: 'natureVolWind',
+  thunder: 'natureVolThunder', ocean: 'natureVolOcean'
+};
+const NATURE_ERROR_IDS = {
+  rain: 'natureErrorRain', birds: 'natureErrorBirds', wind: 'natureErrorWind',
+  thunder: 'natureErrorThunder', ocean: 'natureErrorOcean'
+};
+const NATURE_ROW_IDS = {
+  rain: 'natureRowRain', birds: 'natureRowBirds', wind: 'natureRowWind',
+  thunder: 'natureRowThunder', ocean: 'natureRowOcean'
+};
+const NATURE_TRACK_GROUP = {
+  rain: 'forest', birds: 'forest', wind: 'forest',
+  thunder: 'storm', ocean: 'storm'
 };
 
-let beatsPresets = [];
-let beatsCurrentGrid = null;
-let beatsDisplayStep = -1;
+let natureActiveGroup = 'forest';
 
-// ── Storage helpers ───────────────────────────────────────────────────────────
-
-async function saveBeatsPresets(arr) {
-  await chrome.storage.local.set({ beatsPresets: arr });
-}
-async function loadBeatsPresetsFromStorage() {
-  const r = await chrome.storage.local.get('beatsPresets');
-  return r.beatsPresets || [];
-}
-
-async function saveBeatsLiveState() {
-  if (!beatsCurrentGrid) return;
-  const bpm = parseInt(document.getElementById('beatsBpmSlider').value);
-  chrome.storage.local.set({ beatsLiveGrid: beatsCurrentGrid, beatsLiveBpm: bpm }).catch(() => {});
-}
-
-// ── 16-step → 8-step conversion ───────────────────────────────────────────────
-
-function compress16to8(arr16) {
-  const seen = new Set();
-  const out = new Array(8).fill(0);
-  arr16.forEach((v, i) => {
-    if (v) {
-      const i8 = Math.floor(i / 2);
-      if (!seen.has(i8)) { seen.add(i8); out[i8] = 1; }
-    }
+function saveNatureMixState() {
+  const btn = document.getElementById('natureToggleBtn');
+  const isPlaying = !!btn && btn.textContent === '⏸';
+  const volumes = {};
+  NATURE_TRACK_IDS.forEach(id => {
+    const sl = document.getElementById(NATURE_SLIDER_IDS[id]);
+    volumes[id] = sl ? parseInt(sl.value) : 100;
   });
-  return out;
+  chrome.storage.local.set({ natureMix: { isPlaying, volumes, activeGroup: natureActiveGroup } }).catch(() => {});
 }
 
-function normalisePreset(p) {
-  const grid = {};
-  BEATS_TRACKS.forEach(t => {
-    const raw = p[t] || [];
-    grid[t] = raw.length === 8 ? [...raw] : compress16to8(raw);
-  });
-  return { name: p.name || 'Untitled', bpm: p.bpm || 120, desc: p.desc || '', grid };
-}
-
-// ── Preset dropdown ───────────────────────────────────────────────────────────
-
-function populateBeatsDropdown() {
-  const sel = document.getElementById('beatsPresetSelect');
-  sel.innerHTML = beatsPresets.length
-    ? beatsPresets.map((p,i) => `<option value="${i}">${i} — ${p.name}</option>`).join('')
-    : '<option value="">— load presets.json —</option>';
-}
-
-async function initBeats() {
-  beatsPresets = await loadBeatsPresetsFromStorage();
-  populateBeatsDropdown();
-  const saved = await chrome.storage.local.get(['beatsLiveGrid', 'beatsLiveBpm']);
-  if (saved.beatsLiveGrid) {
-    beatsCurrentGrid = saved.beatsLiveGrid;
-    const bpm = saved.beatsLiveBpm || 120;
-    document.getElementById('beatsBpmSlider').value = bpm;
-    document.getElementById('beatsBpmLabel').textContent = bpm;
-    renderBeatsGrid();
-    send({ type: 'beatsLoadGrid', grid: beatsCurrentGrid, bpm });
-  } else if (beatsPresets.length) {
-    selectBeatsPreset(0);
-  }
-}
-
-function selectBeatsPreset(idx) {
-  const p = beatsPresets[idx];
-  if (!p) return;
-  beatsCurrentGrid = p.grid;
-  document.getElementById('beatsBpmSlider').value = p.bpm;
-  document.getElementById('beatsBpmLabel').textContent = p.bpm;
-  renderBeatsGrid();
-  send({ type: 'beatsLoadGrid', grid: beatsCurrentGrid, bpm: p.bpm });
-  saveBeatsLiveState();
-}
-
-// ── Grid render ───────────────────────────────────────────────────────────────
-
-function renderBeatsGrid() {
-  const el = document.getElementById('beatsGrid');
-  if (!el) return;
-  if (!beatsCurrentGrid) { el.innerHTML = ''; return; }
-
-  el.innerHTML = '';
-  BEATS_TRACKS.forEach(track => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:3px;';
-
-    const label = document.createElement('div');
-    label.style.cssText = 'width:34px;flex-shrink:0;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#555;';
-    label.textContent = BEATS_LABELS[track];
-    row.appendChild(label);
-
-    // 2 groups of 4
-    for (let g = 0; g < 2; g++) {
-      const group = document.createElement('div');
-      group.style.cssText = 'display:flex;gap:3px;flex:1;';
-      for (let s = 0; s < 4; s++) {
-        const stepIdx = g*4+s;
-        const cell = document.createElement('div');
-        const on = beatsCurrentGrid[track][stepIdx];
-        cell.dataset.track = track;
-        cell.dataset.step = stepIdx;
-        cell.style.cssText = `flex:1;height:22px;border-radius:3px;cursor:pointer;transition:background .06s;` +
-          `background:${on ? BEATS_COLORS[track] : 'rgba(255,255,255,0.04)'};` +
-          `box-shadow:${on ? `0 0 5px ${BEATS_COLORS[track]}88` : 'none'};`;
-        cell.addEventListener('click', () => {
-          beatsCurrentGrid[track][stepIdx] = beatsCurrentGrid[track][stepIdx] ? 0 : 1;
-          renderBeatsGrid();
-          send({ type: 'beatsLoadGrid', grid: beatsCurrentGrid, bpm: parseInt(document.getElementById('beatsBpmSlider').value) });
-          saveBeatsLiveState();
-        });
-        group.appendChild(cell);
-      }
-      if (g === 0) {
-        const gap = document.createElement('div');
-        gap.style.cssText = 'width:4px;flex-shrink:0;';
-        row.appendChild(group);
-        row.appendChild(gap);
-      } else {
-        row.appendChild(group);
-      }
-    }
-    el.appendChild(row);
-  });
-
-  beatsMarkStep(beatsDisplayStep);
-}
-
-function beatsMarkStep(stepIdx) {
-  beatsDisplayStep = stepIdx;
-  document.querySelectorAll('#beatsGrid [data-step]').forEach(cell => {
-    const s = parseInt(cell.dataset.step);
-    const track = cell.dataset.track;
-    const on = beatsCurrentGrid && beatsCurrentGrid[track][s];
-    if (s === stepIdx) {
-      cell.style.outline = '2px solid #81C784';
-      cell.style.outlineOffset = '1px';
-    } else {
-      cell.style.outline = 'none';
-      cell.style.background = on ? BEATS_COLORS[track] : 'rgba(255,255,255,0.04)';
-    }
-  });
-}
-
-// ── File import ───────────────────────────────────────────────────────────────
-
-document.getElementById('beatsLoadBtn').addEventListener('click', () => {
-  document.getElementById('beatsFileInput').click();
-});
-
-document.getElementById('beatsFileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const statusEl = document.getElementById('beatsStatus');
-  statusEl.textContent = 'Parsing…';
-  try {
-    const raw = JSON.parse(await file.text());
-    if (!Array.isArray(raw)) throw new Error('Expected a JSON array');
-    beatsPresets = raw.map(normalisePreset);
-    await saveBeatsPresets(beatsPresets);
-    populateBeatsDropdown();
-    if (beatsPresets.length) selectBeatsPreset(0);
-    statusEl.textContent = `✓ ${beatsPresets.length} presets loaded`;
-    setTimeout(() => { statusEl.textContent = ''; }, 2500);
-  } catch (err) {
-    statusEl.textContent = '✗ ' + err.message;
-  }
-  e.target.value = '';
-});
-
-
-// ── Controls ──────────────────────────────────────────────────────────────────
-
-document.getElementById('beatsPanelToggleBtn').addEventListener('click', () => {
-  const panel = document.getElementById('beatsPanel');
-  const btn = document.getElementById('beatsPanelToggleBtn');
+document.getElementById('natureSoundsPanelToggleBtn').addEventListener('click', () => {
+  const panel = document.getElementById('natureSoundsPanel');
+  const btn = document.getElementById('natureSoundsPanelToggleBtn');
   const open = panel.style.display === 'none';
   panel.style.display = open ? 'block' : 'none';
-  btn.textContent = (open ? '▼' : '▶') + ' Beats Maker';
+  btn.textContent = (open ? '▼' : '▶') + ' Nature Sounds';
 });
 
-document.getElementById('beatsPresetSelect').addEventListener('change', (e) => {
-  const idx = parseInt(e.target.value);
-  if (!isNaN(idx)) selectBeatsPreset(idx);
+document.getElementById('natureToggleBtn').addEventListener('click', () => {
+  send({ type: 'natureToggle' });
 });
 
-document.getElementById('beatsPlayBtn').addEventListener('click', () => {
-  send({ type: 'beatsToggle' });
+document.getElementById('natureGroupForestBtn').addEventListener('click', () => {
+  if (natureActiveGroup !== 'forest') send({ type: 'natureGroupToggle' });
 });
 
-document.getElementById('beatsBpmSlider').addEventListener('input', (e) => {
-  const val = parseInt(e.target.value);
-  document.getElementById('beatsBpmLabel').textContent = val;
-  send({ type: 'beatsBpm', value: val });
-  saveBeatsLiveState();
+document.getElementById('natureGroupStormBtn').addEventListener('click', () => {
+  if (natureActiveGroup !== 'storm') send({ type: 'natureGroupToggle' });
 });
 
-document.getElementById('beatsVolSlider').addEventListener('input', (e) => {
-  send({ type: 'beatsVolume', value: parseInt(e.target.value) });
+NATURE_TRACK_IDS.forEach(id => {
+  document.getElementById(NATURE_SLIDER_IDS[id]).addEventListener('input', (e) => {
+    send({ type: 'natureVolume', track: id, value: parseInt(e.target.value) });
+  });
 });
-
-// ── Sync beats state from offscreen ──────────────────────────────────────────
-
-const _origApplyState = applyState;
-// Patch applyState to also handle beats fields
-const _patchedApplyState = function(state) {
-  _origApplyState(state);
-  if (state.beatsIsPlaying !== undefined) {
-    const btn = document.getElementById('beatsPlayBtn');
-    if (btn) {
-      btn.textContent = state.beatsIsPlaying ? '⏸' : '▶';
-      btn.style.background = state.beatsIsPlaying ? '#555' : '#c9a84c';
-      btn.style.color = state.beatsIsPlaying ? '#fff' : '#1a1a2e';
-    }
-  }
-  if (state.beatsBpm !== undefined) {
-    const sl = document.getElementById('beatsBpmSlider');
-    const lb = document.getElementById('beatsBpmLabel');
-    if (sl) sl.value = state.beatsBpm;
-    if (lb) lb.textContent = state.beatsBpm;
-  }
-  if (state.beatsVolume !== undefined) {
-    const sl = document.getElementById('beatsVolSlider');
-    if (sl) sl.value = state.beatsVolume;
-  }
-};
-// Override applyState globally for beats fields
-window.applyState = _patchedApplyState;
-// Re-wire the message listener to use the patched version
-// (the listener already captured applyState by reference via the closure above,
-//  so we also patch the stateUpdate branch directly)
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'stateUpdate') _patchedApplyState(msg);
-});
-
-// ── Boot ──────────────────────────────────────────────────────────────────────
-initBeats();
 
 // Playlist file picker
 document.getElementById('playlistLoadBtn').addEventListener('click', () => {

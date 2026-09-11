@@ -200,30 +200,44 @@
     <span id="noiseVolLabel" style="flex:1; text-align:center; font-size:12px; color:#888;">1%</span>
     <button id="noiseVolUp" style="flex:0 0 auto; padding:4px 10px; font-size:12px;">+</button>
   </div>
-  <!-- Beats Maker panel -->
+  <!-- Nature Sounds panel -->
   <div style="border-top:1px solid #333; padding-top:6px; margin-top:4px; margin-bottom:4px;">
-    <button id="beatsPanelToggleBtn" style="width:100%; padding:5px 8px; border:none; border-radius:4px; background:#16213e; color:#81C784; font-size:11px; font-weight:600; cursor:pointer; text-align:left;">▼ Beats Maker</button>
+    <button id="natureSoundsPanelToggleBtn" style="width:100%; padding:5px 8px; border:none; border-radius:4px; background:#16213e; color:#81C784; font-size:11px; font-weight:600; cursor:pointer; text-align:left;">▼ Nature Sounds</button>
   </div>
-  <div id="beatsPanel" style="display:block; margin-bottom:8px;">
-    <div style="display:flex; gap:5px; margin-bottom:6px; align-items:center;">
-      <select id="beatsPresetSelect" style="flex:1; background:#16213e; color:#e0e0e0; border:1px solid rgba(76,175,80,0.4); border-radius:6px; padding:4px 6px; font-size:11px; font-family:inherit; cursor:pointer; min-width:0;">
-        <option value="">— load presets.json —</option>
-      </select>
-      <button id="beatsLoadBtn" style="flex:0 0 auto; padding:4px 8px; border:1px solid rgba(76,175,80,0.4); border-radius:4px; background:#16213e; color:#81C784; font-size:10px; font-weight:600; cursor:pointer; white-space:nowrap;">Load .json</button>
-      <input type="file" id="beatsFileInput" accept=".json" style="display:none;">
+  <div id="natureSoundsPanel" style="display:block; margin-bottom:8px;">
+    <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+      <button id="natureToggleBtn" style="flex:0 0 auto; padding:5px 14px; border:none; border-radius:4px; background:#c9a84c; color:#1a1a2e; font-size:13px; font-weight:700; cursor:pointer;">&#9654;</button>
+      <span style="font-size:11px; color:#81C784; font-weight:600;">Nature Mix</span>
+      <div style="flex:1; display:flex; gap:4px; justify-content:flex-end;">
+        <button id="natureGroupForestBtn" style="flex:0 0 auto; padding:4px 10px; border:1px solid rgba(76,175,80,0.4); border-radius:4px; background:#c9a84c; color:#1a1a2e; font-size:10px; font-weight:700; cursor:pointer;">Forest</button>
+        <button id="natureGroupStormBtn" style="flex:0 0 auto; padding:4px 10px; border:1px solid rgba(76,175,80,0.4); border-radius:4px; background:#16213e; color:#888; font-size:10px; font-weight:700; cursor:pointer;">Storm</button>
+      </div>
     </div>
-    <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
-      <button id="beatsPlayBtn" style="flex:0 0 auto; padding:5px 14px; border:none; border-radius:4px; background:#c9a84c; color:#1a1a2e; font-size:13px; font-weight:700; cursor:pointer;">▶</button>
-      <span style="font-size:11px; color:#81C784; font-weight:600; white-space:nowrap;">BPM</span>
-      <input type="range" id="beatsBpmSlider" min="40" max="220" value="120" style="flex:1; height:4px; -webkit-appearance:none; background:#0d1117; border-radius:2px; outline:none;">
-      <span id="beatsBpmLabel" style="font-size:12px; color:#c9a84c; min-width:28px; text-align:right;">120</span>
+    <div id="natureRowRain" style="display:flex; align-items:center; gap:6px; margin-bottom:6px; transition:opacity .15s;">
+      <span style="width:96px; flex-shrink:0; font-size:10px; color:#888;">Rainforest Rain</span>
+      <input type="range" id="natureVolRain" min="0" max="100" value="100" style="flex:1; height:4px; -webkit-appearance:none; background:#0d1117; border-radius:2px; outline:none;">
+      <span id="natureErrorRain" style="display:none; font-size:9px; color:#e74c3c; white-space:nowrap;">unavailable</span>
     </div>
-    <div id="beatsGrid" style="background:#0d1117; border-radius:6px; padding:5px 4px;"></div>
-    <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
-      <span style="font-size:11px; color:#81C784; font-weight:600;">Vol</span>
-      <input type="range" id="beatsVolSlider" min="0" max="100" value="70" style="flex:1; height:4px; -webkit-appearance:none; background:#0d1117; border-radius:2px; outline:none;">
+    <div id="natureRowBirds" style="display:flex; align-items:center; gap:6px; margin-bottom:6px; transition:opacity .15s;">
+      <span style="width:96px; flex-shrink:0; font-size:10px; color:#888;">Forest Birdsong</span>
+      <input type="range" id="natureVolBirds" min="0" max="100" value="100" style="flex:1; height:4px; -webkit-appearance:none; background:#0d1117; border-radius:2px; outline:none;">
+      <span id="natureErrorBirds" style="display:none; font-size:9px; color:#e74c3c; white-space:nowrap;">unavailable</span>
     </div>
-    <div id="beatsStatus" style="font-size:10px; color:#666; text-align:center; min-height:14px; margin-top:4px;"></div>
+    <div id="natureRowWind" style="display:flex; align-items:center; gap:6px; margin-bottom:6px; transition:opacity .15s;">
+      <span style="width:96px; flex-shrink:0; font-size:10px; color:#888;">Relaxing Wind</span>
+      <input type="range" id="natureVolWind" min="0" max="100" value="100" style="flex:1; height:4px; -webkit-appearance:none; background:#0d1117; border-radius:2px; outline:none;">
+      <span id="natureErrorWind" style="display:none; font-size:9px; color:#e74c3c; white-space:nowrap;">unavailable</span>
+    </div>
+    <div id="natureRowThunder" style="display:flex; align-items:center; gap:6px; margin-bottom:6px; transition:opacity .15s;">
+      <span style="width:96px; flex-shrink:0; font-size:10px; color:#888;">Epic Thunder Rain</span>
+      <input type="range" id="natureVolThunder" min="0" max="100" value="100" style="flex:1; height:4px; -webkit-appearance:none; background:#0d1117; border-radius:2px; outline:none;">
+      <span id="natureErrorThunder" style="display:none; font-size:9px; color:#e74c3c; white-space:nowrap;">unavailable</span>
+    </div>
+    <div id="natureRowOcean" style="display:flex; align-items:center; gap:6px; transition:opacity .15s;">
+      <span style="width:96px; flex-shrink:0; font-size:10px; color:#888;">Ocean Waves</span>
+      <input type="range" id="natureVolOcean" min="0" max="100" value="100" style="flex:1; height:4px; -webkit-appearance:none; background:#0d1117; border-radius:2px; outline:none;">
+      <span id="natureErrorOcean" style="display:none; font-size:9px; color:#e74c3c; white-space:nowrap;">unavailable</span>
+    </div>
   </div>
 
   <!-- Playlist JSON loader -->

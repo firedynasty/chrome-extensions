@@ -301,9 +301,10 @@ function getState(status) {
       currentLoop: t3Timeout ? T3_TOTAL_LOOPS - t3LoopsRemaining + 1 : 0,
       totalLoops: T3_TOTAL_LOOPS
     },
-    beatsIsPlaying,
-    beatsBpm,
-    beatsVolume: Math.round(beatsVolume * 100),
+    natureIsPlaying,
+    natureVolumes: { ...natureVolumes },
+    natureErrors: { ...natureTrackErrors },
+    natureActiveGroup: activeGroup,
     status: status || ''
   };
 }
@@ -444,119 +445,114 @@ function fadeAudioTo(target, durationMs, gen) {
   });
 }
 
-// ---- Beats Sequencer ----
-const BEATS_STEPS = 8;
-let beatsCtx = null, beatsMaster = null;
-let beatsBpm = 120;
-let beatsIsPlaying = false;
-let beatsCurrentStep = 0;
-let beatsNextNoteTime = 0;
-let beatsTimer = null;
-let beatsVolume = 0.7;
-let beatsGrid = {
-  kick:  new Array(8).fill(0),
-  snare: new Array(8).fill(0),
-  hat:   new Array(8).fill(0),
-  crash: new Array(8).fill(0),
-  tone:  new Array(8).fill(0),
-};
-const BEATS_SWING = 0.25;
-const BEATS_HUMANIZE = 0.004;
+// ---- Nature Sounds Mixer ----
+const NATURE_TRACKS = [
+  { id: 'rain',    label: 'Rainforest Rain', url: 'https://www.dropbox.com/scl/fi/tiq1neyx2emh2or5i8qzv/Rainforest-Rain-Sounds-trimmed-30min-loudnorm-ubNfkpbxXUs.m4a?rlkey=29lotc6vu1922t9vqyu4gnz57&st=s0l0wjbp&raw=1' },
+  { id: 'birds',   label: 'Forest Birdsong', url: 'https://www.dropbox.com/scl/fi/kkadbn85fwekyuh6i2gbd/Forest-Birdsong-Nature-Sounds-trimmed-30min-loudnorm-2G8LAiHSCAs.m4a?rlkey=p2copybzvpcs9y3xy7yzcs7as&st=3d3ew408&raw=1' },
+  { id: 'wind',    label: 'Relaxing Wind', url: 'https://www.dropbox.com/scl/fi/ytuvikmett7phzws1zp0y/Relaxing-Wind-Sounds-trimmed-30min-loudnorm-qBAPsQkS8QI.m4a?rlkey=61ajjlnj6wfcs3qq7hfbdq93l&st=ynzk5jby&raw=1' },
+  { id: 'thunder', label: 'Epic Thunder Rain', url: 'https://www.dropbox.com/scl/fi/c1lzcm6v9bqukebuer2aq/EPIC-THUNDER-RAIN-trimmed-30min-loudnorm-nDq6TstdEi8.m4a?rlkey=jid70hvs76qw0m3bmk0xqclm6&st=03qfflef&raw=1' },
+  { id: 'ocean',   label: 'Ocean Waves', url: 'https://www.dropbox.com/scl/fi/yaqnf8pu68x600da5ehll/oceanwaves-loudnorm.mp3?rlkey=jd3y0xnnyj3sotthyn88r9xa6&st=ym3tagd4&raw=1' },
+];
 
-function ensureBeatsAudio() {
-  if (beatsCtx) return;
-  beatsCtx = new AudioContext();
-  beatsMaster = beatsCtx.createGain();
-  beatsMaster.gain.value = beatsVolume;
-  beatsMaster.connect(beatsCtx.destination);
-}
+const NATURE_GROUPS = [
+  { id: 'forest', label: 'Forest', trackIds: ['rain', 'birds', 'wind'] },
+  { id: 'storm',  label: 'Storm',  trackIds: ['thunder', 'ocean'] },
+];
 
-function bKick(t) {
-  const osc = beatsCtx.createOscillator(), g = beatsCtx.createGain();
-  osc.frequency.setValueAtTime(150, t);
-  osc.frequency.exponentialRampToValueAtTime(45, t+0.12);
-  g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.22);
-  osc.connect(g).connect(beatsMaster); osc.start(t); osc.stop(t+0.25);
-}
-function bSnare(t) {
-  const sz = beatsCtx.sampleRate*0.15, buf = beatsCtx.createBuffer(1,sz,beatsCtx.sampleRate);
-  const d = buf.getChannelData(0);
-  for(let i=0;i<sz;i++) d[i]=(Math.random()*2-1)*(1-i/sz);
-  const n=beatsCtx.createBufferSource(); n.buffer=buf;
-  const f=beatsCtx.createBiquadFilter(); f.type='highpass'; f.frequency.value=1200;
-  const g=beatsCtx.createGain();
-  g.gain.setValueAtTime(0.55,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.15);
-  n.connect(f).connect(g).connect(beatsMaster); n.start(t); n.stop(t+0.15);
-  const osc=beatsCtx.createOscillator(), og=beatsCtx.createGain();
-  osc.frequency.value=190;
-  og.gain.setValueAtTime(0.3,t); og.gain.exponentialRampToValueAtTime(0.001,t+0.1);
-  osc.connect(og).connect(beatsMaster); osc.start(t); osc.stop(t+0.1);
-}
-function bHat(t) {
-  const sz=beatsCtx.sampleRate*0.05, buf=beatsCtx.createBuffer(1,sz,beatsCtx.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<sz;i++) d[i]=(Math.random()*2-1);
-  const n=beatsCtx.createBufferSource(); n.buffer=buf;
-  const f=beatsCtx.createBiquadFilter(); f.type='highpass'; f.frequency.value=7000;
-  const g=beatsCtx.createGain();
-  g.gain.setValueAtTime(0.28,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.04);
-  n.connect(f).connect(g).connect(beatsMaster); n.start(t); n.stop(t+0.05);
-}
-function bCrash(t) {
-  [180,243,310,410,560].forEach((f,idx)=>{
-    const osc=beatsCtx.createOscillator(), g=beatsCtx.createGain();
-    osc.type='sine'; osc.frequency.value=f*(1+idx*0.003);
-    g.gain.setValueAtTime(0.16/(idx+1),t); g.gain.exponentialRampToValueAtTime(0.001,t+0.9);
-    osc.connect(g).connect(beatsMaster); osc.start(t); osc.stop(t+0.9);
+let natureAudioElements = {};
+let natureIsPlaying = false;
+let natureVolumes = { rain: 100, birds: 100, wind: 100, thunder: 100, ocean: 100 };
+let natureTrackErrors = { rain: false, birds: false, wind: false, thunder: false, ocean: false };
+let natureInitialized = false;
+let activeGroup = 'forest';
+
+// Applies each track's effective volume — its own slider level, silenced entirely
+// unless its group is the active one — to its <audio> element. Never reads or
+// writes natureVolumes itself, so it can be called freely from anywhere a slider
+// level or the active group might have changed.
+function applyNatureVolumes() {
+  const group = NATURE_GROUPS.find(g => g.id === activeGroup);
+  NATURE_TRACKS.forEach(track => {
+    const el = natureAudioElements[track.id];
+    if (!el) return;
+    const inActiveGroup = !!group && group.trackIds.includes(track.id);
+    const stored = natureVolumes[track.id] ?? 100;
+    el.volume = inActiveGroup ? stored / 100 : 0;
   });
-  const sz=beatsCtx.sampleRate*0.9, buf=beatsCtx.createBuffer(1,sz,beatsCtx.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<sz;i++) d[i]=(Math.random()*2-1);
-  const n=beatsCtx.createBufferSource(); n.buffer=buf;
-  const f=beatsCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=3500; f.Q.value=0.6;
-  const g=beatsCtx.createGain();
-  g.gain.setValueAtTime(0.22,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.85);
-  n.connect(f).connect(g).connect(beatsMaster); n.start(t); n.stop(t+0.85);
-}
-function bTone(t) {
-  const osc=beatsCtx.createOscillator(), g=beatsCtx.createGain();
-  osc.type='triangle'; osc.frequency.value=330;
-  g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
-  osc.connect(g).connect(beatsMaster); osc.start(t); osc.stop(t+0.2);
 }
 
-function beatsScheduler() {
-  const stepDur = (60/beatsBpm)/2;
-  while(beatsNextNoteTime < beatsCtx.currentTime + 0.15) {
-    const isOff = beatsCurrentStep % 2 === 1;
-    const t = beatsNextNoteTime + (isOff ? stepDur*BEATS_SWING : 0) + (Math.random()*2-1)*BEATS_HUMANIZE;
-    const s = beatsCurrentStep;
-    if(beatsGrid.kick[s]) bKick(t);
-    if(beatsGrid.snare[s]) bSnare(t);
-    if(beatsGrid.hat[s]) bHat(t);
-    if(beatsGrid.crash[s]) bCrash(t);
-    if(beatsGrid.tone[s]) bTone(t);
-    const delay = Math.max(0,(t-beatsCtx.currentTime)*1000);
-    setTimeout(()=>{ chrome.runtime.sendMessage({type:'beatsStep',stepIdx:s}).catch(()=>{}); }, delay);
-    beatsNextNoteTime += stepDur;
-    beatsCurrentStep = (beatsCurrentStep+1)%BEATS_STEPS;
-  }
+function initNatureAudio() {
+  if (natureInitialized) return;
+  natureInitialized = true;
+  NATURE_TRACKS.forEach(track => {
+    const el = new Audio(track.url);
+    el.loop = true;
+    document.body.appendChild(el);
+    el.addEventListener('error', () => {
+      natureTrackErrors[track.id] = true;
+      broadcastState();
+    });
+    // Belt-and-braces for `loop`: these are ~30min files streamed from Dropbox, and
+    // native gapless looping over a long network-streamed source isn't reliable —
+    // if 'ended' fires anyway (loop didn't catch it), seek back and replay manually
+    // so playback keeps going without the user having to press play/pause again.
+    el.addEventListener('ended', () => {
+      el.currentTime = 0;
+      el.play().catch(() => {});
+    });
+    natureAudioElements[track.id] = el;
+  });
+  applyNatureVolumes();
 }
 
-async function beatsStart() {
-  ensureBeatsAudio();
-  if(beatsCtx.state==='suspended') await beatsCtx.resume();
-  beatsCurrentStep=0;
-  beatsNextNoteTime=beatsCtx.currentTime+0.05;
-  beatsTimer=setInterval(beatsScheduler,25);
-  beatsIsPlaying=true;
+function natureToggle() {
+  initNatureAudio();
+  natureIsPlaying = !natureIsPlaying;
+  NATURE_TRACKS.forEach(track => {
+    if (natureTrackErrors[track.id]) return;
+    const el = natureAudioElements[track.id];
+    if (!el) return;
+    if (natureIsPlaying) el.play().catch(() => {}); else el.pause();
+  });
   broadcastState();
 }
 
-function beatsStop() {
-  if(beatsTimer) clearInterval(beatsTimer);
-  beatsTimer=null;
-  beatsIsPlaying=false;
+function natureGroupToggle() {
+  initNatureAudio();
+  activeGroup = activeGroup === 'forest' ? 'storm' : 'forest';
+  applyNatureVolumes();
+  broadcastState();
+}
+
+// MUST only ever read/write natureVolumes[trackId] — never activeGroup. Muting or
+// reactivating a group must never lose or reset a slider's position (FR-006), and
+// this function being the only writer of natureVolumes is what guarantees that:
+// applyNatureVolumes() reads the stored value fresh every time a group becomes
+// active again, so nothing here needs to save/restore anything.
+function natureSetVolume(trackId, value) {
+  if (!NATURE_TRACKS.some(t => t.id === trackId)) return;
+  const clamped = Math.min(100, Math.max(0, value));
+  natureVolumes[trackId] = clamped;
+  applyNatureVolumes();
+  broadcastState();
+}
+
+function natureLoadState(isPlaying, volumes, activeGroupArg) {
+  initNatureAudio();
+  NATURE_TRACKS.forEach(track => {
+    const v = (volumes && volumes[track.id] !== undefined) ? volumes[track.id] : 100;
+    natureVolumes[track.id] = v;
+  });
+  activeGroup = NATURE_GROUPS.some(g => g.id === activeGroupArg) ? activeGroupArg : 'forest';
+  applyNatureVolumes();
+  natureIsPlaying = !!isPlaying;
+  if (natureIsPlaying) {
+    NATURE_TRACKS.forEach(track => {
+      if (natureTrackErrors[track.id]) return;
+      const el = natureAudioElements[track.id];
+      if (el) el.play().catch(() => {});
+    });
+  }
   broadcastState();
 }
 
@@ -621,15 +617,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   } else if (msg.type === 'switchAlbum') {
     loadAlbum(msg.index);
     broadcastState();
-  } else if (msg.type === 'beatsToggle') {
-    if(beatsIsPlaying) beatsStop(); else beatsStart();
-  } else if (msg.type === 'beatsBpm') {
-    beatsBpm = msg.value;
-  } else if (msg.type === 'beatsVolume') {
-    beatsVolume = msg.value / 100;
-    if(beatsMaster) beatsMaster.gain.value = beatsVolume;
-  } else if (msg.type === 'beatsLoadGrid') {
-    beatsGrid = msg.grid;
-    if(msg.bpm) beatsBpm = msg.bpm;
+  } else if (msg.type === 'natureToggle') {
+    natureToggle();
+  } else if (msg.type === 'natureGroupToggle') {
+    natureGroupToggle();
+  } else if (msg.type === 'natureVolume') {
+    natureSetVolume(msg.track, msg.value);
+  } else if (msg.type === 'natureLoadState') {
+    natureLoadState(msg.isPlaying, msg.volumes, msg.activeGroup);
   }
 });

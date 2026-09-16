@@ -4,7 +4,7 @@
   const BAR_ID    = 'yt-controls-bar';
   const SPACER_ID = 'yt-controls-spacer';
   const MODAL_ID  = 'yt-ctrl-import-modal';
-  const VER       = 3;
+  const VER       = 6;
   const VIEWER_BASE = 'https://vercel-youtubeviewer.vercel.app/';
 
   // ── helpers ──────────────────────────────────────────────────────────────
@@ -294,6 +294,78 @@
     runT3Loop(timerBtn, pauseBtn, tsInput, t3Generation);
   }
 
+  // ── 3m repeat timer (x8) ────────────────────────────────────────────────
+  const T4_DURATION_MS = 3 * 60 * 1000; // 3 minutes
+  const T4_TOTAL_LOOPS = 8;
+  let t4Timeout = null;
+  let t4LoopsRemaining = 0;
+  let t4Generation = 0;
+  let t4Paused = false;
+
+  function cancelT4(t4Btn, t4PauseBtn) {
+    t4Generation++;
+    if (t4Timeout) { clearTimeout(t4Timeout); t4Timeout = null; }
+    t4Paused = false;
+    t4Btn.textContent = '⏱️ 3m';
+    t4Btn.style.background = 'linear-gradient(45deg,#ab47bc,#8e24aa)';
+    if (t4PauseBtn) { t4PauseBtn.style.display = 'none'; t4PauseBtn.textContent = '⏸'; t4PauseBtn.style.background = '#546e7a'; }
+    flashStatus('Timer cancelled', '#e74c3c');
+  }
+
+  function runT4Loop(t4Btn, t4PauseBtn, t4TsInput, gen) {
+    const currentLoop = T4_TOTAL_LOOPS - t4LoopsRemaining + 1;
+    t4Btn.textContent = `⏹️ ${currentLoop}/${T4_TOTAL_LOOPS}`;
+    flashStatus(`3m loop ${currentLoop}/${T4_TOTAL_LOOPS}`, '#ab47bc');
+    t4Timeout = setTimeout(() => {
+      if (gen !== t4Generation) return;
+      t4LoopsRemaining--;
+      const seekTo = parseHMS(t4TsInput.value);
+      const v = video(); if (v) v.currentTime = seekTo;
+      if (t4LoopsRemaining > 0) {
+        runT4Loop(t4Btn, t4PauseBtn, t4TsInput, gen);
+      } else {
+        t4Timeout = null;
+        t4Btn.textContent = '⏱️ 3m';
+        t4Btn.style.background = 'linear-gradient(45deg,#ab47bc,#8e24aa)';
+        if (t4PauseBtn) { t4PauseBtn.style.display = 'none'; t4PauseBtn.textContent = '⏸'; t4PauseBtn.style.background = '#546e7a'; }
+        t4Paused = false;
+        flashStatus(`3m complete (${T4_TOTAL_LOOPS}/${T4_TOTAL_LOOPS})`, '#2ecc71');
+      }
+    }, T4_DURATION_MS);
+  }
+
+  function toggleT4Pause(t4Btn, t4PauseBtn, t4TsInput) {
+    t4Paused = !t4Paused;
+    if (t4Paused) {
+      if (t4Timeout) { clearTimeout(t4Timeout); t4Timeout = null; }
+      t4PauseBtn.textContent = '▶ resume';
+      t4PauseBtn.style.background = '#f57f17';
+      flashStatus('Loop paused', '#ffb300');
+    } else {
+      t4PauseBtn.textContent = '⏸';
+      t4PauseBtn.style.background = '#546e7a';
+      const v = video();
+      const nowSecs = v ? v.currentTime : 0;
+      const hms = secsToHMS(nowSecs);
+      t4TsInput.value = hms;
+      t4Generation++;
+      runT4Loop(t4Btn, t4PauseBtn, t4TsInput, t4Generation);
+    }
+  }
+
+  function toggleT4(t4Btn, t4PauseBtn, t4TsInput) {
+    if (t4Timeout || t4Paused) { cancelT4(t4Btn, t4PauseBtn); return; }
+    const v = video();
+    if (!v) { flashStatus('No video', '#e74c3c'); return; }
+    const hms = secsToHMS(v.currentTime);
+    t4TsInput.value = hms;
+    t4LoopsRemaining = T4_TOTAL_LOOPS;
+    t4Paused = false;
+    t4Generation++;
+    t4PauseBtn.style.display = '';
+    runT4Loop(t4Btn, t4PauseBtn, t4TsInput, t4Generation);
+  }
+
   function startTimeClock(spanEl) {
     stopTimeClock();
     _timeInterval = setInterval(() => {
@@ -576,6 +648,7 @@
 
     // ── clear button ──────────────────────────────────────────────────────
     const clearBtn = btn('✕ Clear', '#6b1a1a', '#fff', 'Clear all stamps for this video');
+    clearBtn.style.display = 'none';
     clearBtn.addEventListener('click', () => {
       if (!_stamps.length) { flashStatus('No stamps to clear', '#e74c3c'); return; }
       _stamps = [];
@@ -659,6 +732,57 @@
 
     timerBtn.addEventListener('click', () => toggleT3(timerBtn, timerPauseBtn, timerTsInput));
 
+    // ── 3m timer button ─────────────────────────────────────────────────────
+    const t4Btn = document.createElement('button');
+    t4Btn.textContent = '⏱️ 3m';
+    t4Btn.title = 'Play 3m, rewind, repeat x8';
+    t4Btn.style.cssText = `
+      padding: 5px 12px;
+      border: none;
+      border-radius: 5px;
+      background: linear-gradient(45deg,#ab47bc,#8e24aa);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    `;
+    // ── 3m timestamp input ──────────────────────────────────────────────────
+    const t4TsInput = document.createElement('input');
+    t4TsInput.type = 'text';
+    t4TsInput.value = '00:00:00';
+    t4TsInput.placeholder = '00:00:00';
+    t4TsInput.title = 'Loop back to this timestamp (HH:MM:SS)';
+    t4TsInput.style.cssText = `
+      width: 68px;
+      padding: 3px 5px;
+      border: 1px solid #555;
+      border-radius: 5px;
+      background: #1a1a1a;
+      color: #ddd;
+      font-size: 11px;
+      font-family: monospace;
+    `;
+
+    // ── 3m pause button ─────────────────────────────────────────────────────
+    const t4PauseBtn = document.createElement('button');
+    t4PauseBtn.textContent = '⏸';
+    t4PauseBtn.title = 'Pause loop';
+    t4PauseBtn.style.cssText = `
+      padding: 5px 10px;
+      border: none;
+      border-radius: 5px;
+      background: #546e7a;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: none;
+    `;
+    t4PauseBtn.addEventListener('click', () => toggleT4Pause(t4Btn, t4PauseBtn, t4TsInput));
+
+    t4Btn.addEventListener('click', () => toggleT4(t4Btn, t4PauseBtn, t4TsInput));
+
     // ── status flash ──────────────────────────────────────────────────────
     const statusSpan = document.createElement('span');
     statusSpan.style.cssText = 'font-size:11px; color:#888; white-space:nowrap; margin-left:4px;';
@@ -692,7 +816,7 @@
       border-top: 1px solid #3ea6ff22;
     `;
 
-    bar.append(skipBack10, skipFwd10, skipFwd30, timeSpan, divider, countSpan, importBtn, clearBtn, volDownBtn, volUpBtn, noiseBtnEl, speedBtn, timerTsInput, timerBtn, timerPauseBtn, statusSpan, stampsRow);
+    bar.append(skipBack10, skipFwd10, skipFwd30, timeSpan, divider, countSpan, importBtn, clearBtn, volDownBtn, volUpBtn, noiseBtnEl, speedBtn, timerTsInput, timerBtn, timerPauseBtn, t4TsInput, t4Btn, t4PauseBtn, statusSpan, stampsRow);
 
     player.parentElement.insertBefore(bar, player);
     injectSpacer();

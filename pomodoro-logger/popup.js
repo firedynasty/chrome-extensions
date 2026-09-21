@@ -3,6 +3,7 @@ document.getElementById('sheetsBtn').addEventListener('click', () => {
 });
 
 const workBtn = document.getElementById('workBtn');
+const endBtn = document.getElementById('endBtn');
 const breakBtn = document.getElementById('breakBtn');
 const customBtn = document.getElementById('customBtn');
 const customInput = document.getElementById('customInput');
@@ -12,9 +13,11 @@ const scriptUrlInput = document.getElementById('scriptUrl');
 const saveUrlBtn = document.getElementById('saveUrl');
 const status = document.getElementById('status');
 const historyEl = document.getElementById('history');
+const dailyWorkTotalEl = document.getElementById('dailyWorkTotal');
 
 let timerInterval = null;
 let countdownInterval = null;
+let todaysEntriesCache = [];
 
 // Pomodoro mode: auto-cycles 25min work → 5min break → repeat
 const countdownDisplay = document.getElementById('countdownDisplay');
@@ -62,14 +65,17 @@ chrome.storage.onChanged.addListener((changes) => {
   }
 });
 
+function stopPomodoro() {
+  clearInterval(countdownInterval);
+  chrome.storage.local.remove(['countdownEndTime', 'pomodoroPhase']);
+  chrome.runtime.sendMessage({ type: 'clearCountdown' });
+  resetPomodoroUI();
+}
+
 timerBtn.addEventListener('click', () => {
   chrome.storage.local.get(['countdownEndTime'], (data) => {
     if (data.countdownEndTime && data.countdownEndTime > Date.now()) {
-      // Stop pomodoro
-      clearInterval(countdownInterval);
-      chrome.storage.local.remove(['countdownEndTime', 'pomodoroPhase']);
-      chrome.runtime.sendMessage({ type: 'clearCountdown' });
-      resetPomodoroUI();
+      stopPomodoro();
     } else {
       // Start pomodoro (work phase)
       const endTime = Date.now() + WORK_MINUTES * 60 * 1000;
@@ -120,17 +126,20 @@ chrome.storage.local.get(['fiveMinEndTime'], (data) => {
   }
 });
 
+function stopFiveMinTimer() {
+  clearInterval(fiveMinInterval);
+  chrome.storage.local.remove('fiveMinEndTime');
+  chrome.runtime.sendMessage({ type: 'clearFiveMin' });
+  fiveMinDisplay.textContent = '5:00';
+  fiveMinDisplay.style.color = '#555';
+  fiveMinBtn.textContent = '5 Min Timer';
+  fiveMinBtn.style.background = '#e74c3c';
+}
+
 fiveMinBtn.addEventListener('click', () => {
   chrome.storage.local.get(['fiveMinEndTime'], (data) => {
     if (data.fiveMinEndTime && data.fiveMinEndTime > Date.now()) {
-      // Stop
-      clearInterval(fiveMinInterval);
-      chrome.storage.local.remove('fiveMinEndTime');
-      chrome.runtime.sendMessage({ type: 'clearFiveMin' });
-      fiveMinDisplay.textContent = '5:00';
-      fiveMinDisplay.style.color = '#555';
-      fiveMinBtn.textContent = '5 Min Timer';
-      fiveMinBtn.style.background = '#e74c3c';
+      stopFiveMinTimer();
     } else {
       // Start
       const endTime = Date.now() + FIVE_MIN_MS;
@@ -180,9 +189,9 @@ chrome.storage.local.get(['scriptUrl', 'lastLogTime', 'lastActivity', 'history']
     currentActivityEl.textContent = data.lastActivity;
     startTimerFrom(data.lastLogTime);
   }
-  if (data.history) {
-    renderHistory(data.history);
-  }
+  todaysEntriesCache = getTodaysEntries(data.history || []);
+  renderHistory(todaysEntriesCache);
+  renderDailyTotal(todaysEntriesCache);
 });
 
 saveUrlBtn.addEventListener('click', () => {
@@ -200,6 +209,15 @@ saveUrlBtn.addEventListener('click', () => {
 
 workBtn.addEventListener('click', () => logActivity('work'));
 breakBtn.addEventListener('click', () => logActivity('break'));
+endBtn.addEventListener('click', () => {
+  logActivity('end');
+  chrome.storage.local.get(['countdownEndTime'], (data) => {
+    if (data.countdownEndTime && data.countdownEndTime > Date.now()) stopPomodoro();
+  });
+  chrome.storage.local.get(['fiveMinEndTime'], (data) => {
+    if (data.fiveMinEndTime && data.fiveMinEndTime > Date.now()) stopFiveMinTimer();
+  });
+});
 
 customBtn.addEventListener('click', () => {
   const input = customInput;
@@ -239,14 +257,20 @@ async function logActivity(activity) {
   // Add to local history
   chrome.storage.local.get(['history'], (data) => {
     const history = data.history || [];
-    history.unshift({ time: timeStr, activity });
-    // Keep last 20 entries
-    if (history.length > 20) history.length = 20;
+    history.unshift({ time: timeStr, activity, timestamp: logTime });
     chrome.storage.local.set({ history, lastLogTime: logTime, lastActivity: activity });
-    renderHistory(history);
+    todaysEntriesCache = getTodaysEntries(history);
+    renderHistory(todaysEntriesCache);
+    renderDailyTotal(todaysEntriesCache);
   });
 
-  // Send to Google Sheets
+  // Send to Google Sheets (work only — breaks stay local)
+  if (activity === 'break') {
+    status.textContent = `${timeStr} — break (local only, not sent to Sheet)`;
+    status.className = '';
+    return;
+  }
+
   chrome.storage.local.get(['scriptUrl'], async (data) => {
     if (!data.scriptUrl) {
       status.textContent = 'Logged locally (no script URL)';
@@ -285,14 +309,55 @@ function startTimerFrom(startTime) {
     const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
     const secs = String(totalSecs % 60).padStart(2, '0');
     timerEl.textContent = `${hrs}:${mins}:${secs}`;
+    renderDailyTotal(todaysEntriesCache);
   }
   updateTimer();
   timerInterval = setInterval(updateTimer, 1000);
 }
 
-function renderHistory(history) {
-  historyEl.innerHTML = history.map(entry => {
+function isSameLocalDay(timestampA, timestampB) {
+  const a = new Date(timestampA);
+  const b = new Date(timestampB);
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+function getTodaysEntries(history) {
+  return history.filter(entry => entry.timestamp && isSameLocalDay(entry.timestamp, Date.now()));
+}
+
+function computeDailyWorkTotalMs(todaysEntries) {
+  const sorted = [...todaysEntries].sort((a, b) => a.timestamp - b.timestamp);
+  let totalMs = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].activity !== 'work') continue;
+    const end = i + 1 < sorted.length ? sorted[i + 1].timestamp : Date.now();
+    totalMs += end - sorted[i].timestamp;
+  }
+  return totalMs;
+}
+
+function formatDuration(ms) {
+  const totalSecs = Math.floor(ms / 1000);
+  const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+  const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+  const secs = String(totalSecs % 60).padStart(2, '0');
+  return `${hrs}:${mins}:${secs}`;
+}
+
+function renderDailyTotal(todaysEntries) {
+  dailyWorkTotalEl.textContent = formatDuration(computeDailyWorkTotalMs(todaysEntries));
+}
+
+function renderHistory(entries) {
+  if (!entries.length) {
+    historyEl.innerHTML = '<div class="history-empty">No activity logged today yet</div>';
+    return;
+  }
+  historyEl.innerHTML = entries.map(entry => {
     const cls = entry.activity === 'work' ? 'work'
+      : entry.activity === 'end' ? 'end'
       : entry.activity === 'break' ? 'break'
       : 'custom';
     return `<div class="history-entry"><span class="time">${entry.time}</span> <span class="${cls}">${entry.activity}</span></div>`;

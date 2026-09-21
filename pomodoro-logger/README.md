@@ -15,7 +15,8 @@ Chrome extension that logs work/break timestamps to a Google Sheet with a single
 - **Work / Break** buttons log the current time and activity
 - **Custom** button for arbitrary activity names (e.g. "lunch", "meeting")
 - **Running timer** shows elapsed time since last log entry (persists across popup opens)
-- **Local history** of recent entries in the popup
+- **Local history** of today's entries in the popup (resets each day; older entries stay in storage but aren't shown)
+- **Today's work time** total, shown live below the history and excluding breaks/custom activities
 - Works offline — logs locally even without a Google Sheet connected
 
 ## Setup

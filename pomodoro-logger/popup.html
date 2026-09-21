@@ -88,6 +88,12 @@
     #workBtn:hover {
       background: #219a52;
     }
+    #endBtn {
+      background: #c0392b;
+    }
+    #endBtn:hover {
+      background: #a93226;
+    }
     #breakBtn {
       background: #e67e22;
     }
@@ -95,9 +101,7 @@
       background: #d35400;
     }
     #customBtn {
-      width: 100%;
       background: #8e44ad;
-      margin-bottom: 6px;
     }
     #customBtn:hover {
       background: #7d3c98;
@@ -176,8 +180,26 @@
     }
     .history-entry .time { color: #3ea6ff; }
     .history-entry .work { color: #2ecc71; }
+    .history-entry .end { color: #c0392b; }
     .history-entry .break { color: #e67e22; }
     .history-entry .custom { color: #8e44ad; }
+    .history-empty {
+      padding: 4px 0;
+      color: #555;
+      font-style: italic;
+    }
+    #dailyTotalRow {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #888;
+      margin-top: 6px;
+    }
+    #dailyWorkTotal {
+      font-family: 'Courier New', monospace;
+      color: #2ecc71;
+      font-weight: 600;
+    }
     .beats-row {
       display: flex;
       align-items: center;
@@ -215,12 +237,19 @@
   </div>
   <div class="btn-row">
     <button id="workBtn">+ Work</button>
-    <button id="breakBtn">+ Break</button>
+    <button id="endBtn">+ End</button>
   </div>
-  <button id="customBtn">Custom</button>
+  <div class="btn-row">
+    <button id="breakBtn">Break</button>
+    <button id="customBtn">Custom</button>
+  </div>
   <button id="sheetsBtn" style="width: 100%; background: #0f9d58; margin-bottom: 6px;">Open Google Sheets</button>
   <input type="text" id="customInput" placeholder="Type activity, press Enter">
   <div id="history"></div>
+  <div id="dailyTotalRow">
+    <span>Today's work time</span>
+    <span id="dailyWorkTotal">00:00:00</span>
+  </div>
   <hr>
   <div id="setupSection">
     <label>Google Apps Script URL:</label>

@@ -11,7 +11,7 @@
     "extension_pages": "script-src 'self'; frame-src https://www.youtube.com; object-src 'self'"
   },
   "web_accessible_resources": [{
-    "resources": ["playlists.json"],
+    "resources": ["playlists.json", "youtube_athlete.json"],
     "matches": []
   }],
   "icons": {

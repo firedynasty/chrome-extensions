@@ -209,6 +209,34 @@ def parse_file(filepath):
     return entries
 
 
+def generate_athlete_json(athlete_dir: Path, output_path: Path):
+    """Scan youtube_athlete_videos/ txt files and write youtube_athlete.json."""
+    entries = []
+    for txt_file in sorted(athlete_dir.glob('*.txt')):
+        try:
+            with open(txt_file, 'r', encoding='utf-8-sig') as f:
+                lines = f.readlines()
+        except UnicodeDecodeError:
+            with open(txt_file, 'r', encoding='latin-1') as f:
+                lines = f.readlines()
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            comma = line.find(',')
+            if comma == -1:
+                continue
+            name = line[:comma].strip()
+            url  = line[comma + 1:].strip()
+            if name and url:
+                entries.append({'name': name, 'url': url})
+        print(f'  {txt_file.name}: {len(entries)} entry(ies)')
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(entries, f, indent=2, ensure_ascii=False)
+    print(f'-> Wrote {len(entries)} athlete entries to {output_path}')
+
+
 def main():
     parser = argparse.ArgumentParser(description='Generate playlists.json from playlists/ directory')
     parser.add_argument('-i', '--input', default='playlists',
@@ -216,6 +244,11 @@ def main():
     parser.add_argument('-o', '--output', default='playlists.json',
                         help='Output JSON file (default: playlists.json)')
     args = parser.parse_args()
+
+    # Generate youtube_athlete.json from youtube_athlete_videos/
+    athlete_dir = Path('youtube_athlete_videos')
+    if athlete_dir.is_dir():
+        generate_athlete_json(athlete_dir, Path('youtube_athlete.json'))
 
     input_dir = Path(args.input)
     if not input_dir.is_dir():

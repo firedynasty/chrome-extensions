@@ -231,6 +231,29 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 document.getElementById('accessLinkBtn').addEventListener('click', showYouTubeLinkForAlbum);
 
+// Athlete Clips
+(async () => {
+  try {
+    const resp = await fetch(chrome.runtime.getURL('youtube_athlete.json'));
+    const entries = await resp.json();
+    const select = document.getElementById('athleteSelect');
+    entries.forEach(({ name, url }) => {
+      if (!name || !url) return;
+      const opt = document.createElement('option');
+      opt.value = url;
+      opt.textContent = name;
+      select.appendChild(opt);
+    });
+  } catch (e) {}
+})();
+
+document.getElementById('athleteGoBtn').addEventListener('click', () => {
+  const url = document.getElementById('athleteSelect').value;
+  if (url) chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) chrome.tabs.update(tabs[0].id, { url });
+  });
+});
+
 // Init dropdowns from local file, then try to get playback state
 initDropdowns().then(() => {
   // Small delay to let service worker wake up

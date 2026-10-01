@@ -26,9 +26,21 @@ const pomPhaseLabel = document.getElementById('pomPhaseLabel');
 const WORK_MINUTES = 25;
 const BREAK_MINUTES = 5;
 
+const pomFill = document.getElementById('pomFill');
+const pomPct = document.getElementById('pomPct');
+const fiveFill = document.getElementById('fiveFill');
+const fivePct = document.getElementById('fivePct');
+
+function setProgress(fillEl, pctEl, remainingMs, totalMs) {
+  const pct = Math.max(0, Math.min(100, (1 - remainingMs / totalMs) * 100));
+  fillEl.style.width = pct + '%';
+  pctEl.textContent = Math.round(pct) + '%';
+}
+
 function setPomPhaseUI(phase) {
   pomPhaseLabel.textContent = phase === 'work' ? 'WORK' : 'BREAK';
   pomPhaseLabel.style.color = phase === 'work' ? '#27ae60' : '#e67e22';
+  pomFill.classList.toggle('break', phase !== 'work');
 }
 
 function resetPomodoroUI() {
@@ -38,6 +50,7 @@ function resetPomodoroUI() {
   pomPhaseLabel.style.color = '#555';
   timerBtn.textContent = 'Pomodoro';
   timerBtn.classList.remove('running');
+  setProgress(pomFill, pomPct, 1, 1);
 }
 
 // Restore pomodoro state on popup open
@@ -88,6 +101,7 @@ timerBtn.addEventListener('click', () => {
 });
 
 function startCountdownDisplay(endTime, phase) {
+  const totalMs = (phase === 'work' ? WORK_MINUTES : BREAK_MINUTES) * 60 * 1000;
   countdownDisplay.classList.remove('idle');
   timerBtn.textContent = 'Stop';
   timerBtn.classList.add('running');
@@ -97,6 +111,7 @@ function startCountdownDisplay(endTime, phase) {
     if (remaining <= 0) {
       clearInterval(countdownInterval);
       countdownDisplay.textContent = '0:00';
+      setProgress(pomFill, pomPct, 0, totalMs);
       // Background will auto-schedule next phase; UI updates via storage listener
       return;
     }
@@ -104,6 +119,7 @@ function startCountdownDisplay(endTime, phase) {
     const mins = Math.floor(totalSecs / 60);
     const secs = String(totalSecs % 60).padStart(2, '0');
     countdownDisplay.textContent = `${mins}:${secs}`;
+    setProgress(pomFill, pomPct, remaining, totalMs);
   }
   update();
   countdownInterval = setInterval(update, 1000);
@@ -134,6 +150,7 @@ function stopFiveMinTimer() {
   fiveMinDisplay.style.color = '#555';
   fiveMinBtn.textContent = '5 Min Timer';
   fiveMinBtn.style.background = '#e74c3c';
+  setProgress(fiveFill, fivePct, 1, 1);
 }
 
 fiveMinBtn.addEventListener('click', () => {
@@ -160,12 +177,14 @@ function startFiveMinDisplay(endTime) {
     if (remaining <= 0) {
       clearInterval(fiveMinInterval);
       fiveMinDisplay.textContent = '0:00';
+      setProgress(fiveFill, fivePct, 0, FIVE_MIN_MS);
       chrome.storage.local.remove('fiveMinEndTime');
       setTimeout(() => {
         fiveMinDisplay.textContent = '5:00';
         fiveMinDisplay.style.color = '#555';
         fiveMinBtn.textContent = '5 Min Timer';
         fiveMinBtn.style.background = '#e74c3c';
+        setProgress(fiveFill, fivePct, 1, 1);
       }, 2000);
       return;
     }
@@ -173,6 +192,7 @@ function startFiveMinDisplay(endTime) {
     const mins = Math.floor(totalSecs / 60);
     const secs = String(totalSecs % 60).padStart(2, '0');
     fiveMinDisplay.textContent = `${mins}:${secs}`;
+    setProgress(fiveFill, fivePct, remaining, FIVE_MIN_MS);
   }
   update();
   fiveMinInterval = setInterval(update, 1000);

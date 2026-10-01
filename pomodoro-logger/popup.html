@@ -217,6 +217,30 @@
     .beats-label input[type="checkbox"] {
       cursor: pointer;
     }
+    .progress {
+      position: relative;
+      height: 10px;
+      background: #16213e;
+      border-radius: 5px;
+      overflow: hidden;
+      margin: -4px 0 10px 0;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 5px;
+      background: linear-gradient(90deg, #3ea6ff, #27ae60);
+      transition: width 1s linear;
+    }
+    .progress-fill.break { background: linear-gradient(90deg, #e67e22, #f1c40f); }
+    .progress-fill.five { background: linear-gradient(90deg, #e74c3c, #e67e22); }
+    .progress-label {
+      font-size: 10px;
+      color: #888;
+      text-align: right;
+      margin: -6px 0 8px 0;
+      font-family: 'Courier New', monospace;
+    }
   </style>
 </head>
 <body>
@@ -228,10 +252,14 @@
     <div id="countdownDisplay" class="idle">25:00</div>
     <button id="timerBtn">Pomodoro</button>
   </div>
+  <div class="progress"><div id="pomFill" class="progress-fill"></div></div>
+  <div id="pomPct" class="progress-label">0%</div>
   <div id="fiveMinRow" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
     <div id="fiveMinDisplay" class="idle" style="font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #555; letter-spacing: 2px; flex: 1; text-align: center;">5:00</div>
     <button id="fiveMinBtn" style="padding: 8px 14px; border: none; border-radius: 6px; background: #e74c3c; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">5 Min Timer</button>
   </div>
+  <div class="progress"><div id="fiveFill" class="progress-fill five"></div></div>
+  <div id="fivePct" class="progress-label">0%</div>
   <div style="margin-bottom: 10px;">
     <code id="caffCmd" style="display: block; background: #16213e; padding: 6px 8px; border-radius: 4px; font-size: 11px; color: #3ea6ff; cursor: pointer; user-select: all;">caffeinate -d -t 700</code>
   </div>

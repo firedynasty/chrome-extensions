@@ -2,6 +2,10 @@
 
 A Chrome extension (Manifest V3) for playing music from Dropbox-hosted audio files. Supports playlist genres, albums with chapter timestamps, metronome, playback speed, white noise, and a 3-minute repeat timer.
 
+## Track Loop (🔁)
+
+Each track in the popup's track list has a **🔁** button. Clicking it navigates the active tab to that track's YouTube timestamp and starts a **3-minute segment loop ×8** right there — no other extension needed. A floating gold chip on the page shows the loop count (`loop 3/8`) and an **✕** to cancel; pausing the video suspends the loop, playing resumes it, and playback continues after the 8th loop. (Engine ported from the `looper` extension; injection runs from the service worker via `loopTrack` messages, so it works even after the popup closes.)
+
 ## Installation
 
 1. Open `chrome://extensions`

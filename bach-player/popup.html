@@ -143,14 +143,34 @@
       padding-top: 8px;
     }
     .track-item {
+      display: flex;
+      align-items: center;
       padding: 5px 8px;
       font-size: 11px;
       color: #888;
       cursor: pointer;
       border-radius: 4px;
-      white-space: nowrap;
+    }
+    .track-title {
+      flex: 1;
       overflow: hidden;
+      white-space: nowrap;
       text-overflow: ellipsis;
+    }
+    .track-loop-btn {
+      flex-shrink: 0;
+      margin-left: 6px;
+      background: #2c3e50;
+      border: none;
+      color: #c9a84c;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 1px 6px;
+    }
+    .track-loop-btn:hover {
+      background: #c9a84c;
+      color: #1a1a2e;
     }
     .track-item:hover {
       background: #16213e;

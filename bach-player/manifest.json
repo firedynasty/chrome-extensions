@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Music Player",
-  "version": "3.0",
+  "version": "3.1",
   "description": "Persistent music player with genre/album playlists",
-  "permissions": ["offscreen", "storage", "tabs"],
+  "permissions": ["offscreen", "storage", "tabs", "scripting"],
+  "host_permissions": ["https://www.youtube.com/*"],
   "background": {
     "service_worker": "background.js"
   },

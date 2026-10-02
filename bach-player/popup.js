@@ -25,12 +25,13 @@ function renderTrackList(tracks) {
     const title = typeof t === 'object' ? t.title : t;
     const ytId  = typeof t === 'object' ? (t.youtubeId || '') : '';
     const secs  = typeof t === 'object' ? (t.seconds || 0) : 0;
-    return `<div class="track-item" data-index="${i}" data-ytid="${ytId}" data-secs="${Math.floor(secs)}">${title}</div>`;
+    const loopBtn = ytId ? '<button class="track-loop-btn" title="Loop 3 min ×8 from here">🔁</button>' : '';
+    return `<div class="track-item" data-index="${i}" data-ytid="${ytId}" data-secs="${Math.floor(secs)}"><span class="track-title">${title}</span>${loopBtn}</div>`;
   }).join('');
   trackListEl.querySelectorAll('.track-item').forEach(el => {
-    el.addEventListener('click', () => {
-      const ytId = el.dataset.ytid;
-      const secs = el.dataset.secs || '0';
+    const ytId = el.dataset.ytid;
+    const secs = el.dataset.secs || '0';
+    el.querySelector('.track-title').addEventListener('click', () => {
       if (ytId) {
         const url = `https://www.youtube.com/watch?v=${ytId}&t=${secs}s`;
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -38,6 +39,19 @@ function renderTrackList(tracks) {
         });
       }
     });
+    // 🔁 — hand off to the service worker: it navigates the tab and injects
+    // the 3 min ×8 segment looper. Close the popup so the chip is visible.
+    const loopBtn = el.querySelector('.track-loop-btn');
+    if (loopBtn) {
+      loopBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const title = el.querySelector('.track-title').textContent;
+        chrome.runtime.sendMessage(
+          { type: 'loopTrack', ytid: ytId, secs: parseInt(secs) || 0, title },
+          () => window.close()
+        );
+      });
+    }
   });
 }
 

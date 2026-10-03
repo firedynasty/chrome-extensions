@@ -55,6 +55,8 @@ chrome.runtime.onMessage.addListener((msg) => {
   } else if (msg.type === 'scheduleCountdown') {
     chrome.alarms.clear(COUNTDOWN_ALARM);
     chrome.alarms.create(COUNTDOWN_ALARM, { delayInMinutes: msg.delayMinutes });
+  } else if (msg.type === 'playChimeNow') {
+    playChimeViaOffscreen();
   } else if (msg.type === 'clearCountdown') {
     chrome.alarms.clear(COUNTDOWN_ALARM);
   }

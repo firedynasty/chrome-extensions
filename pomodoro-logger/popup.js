@@ -82,6 +82,7 @@ function stopPomodoro() {
   clearInterval(countdownInterval);
   chrome.storage.local.remove(['countdownEndTime', 'pomodoroPhase']);
   chrome.runtime.sendMessage({ type: 'clearCountdown' });
+  chrome.runtime.sendMessage({ type: 'playChimeNow' });
   resetPomodoroUI();
 }
 
@@ -146,6 +147,7 @@ function stopFiveMinTimer() {
   clearInterval(fiveMinInterval);
   chrome.storage.local.remove('fiveMinEndTime');
   chrome.runtime.sendMessage({ type: 'clearFiveMin' });
+  chrome.runtime.sendMessage({ type: 'playChimeNow' });
   fiveMinDisplay.textContent = '5:00';
   fiveMinDisplay.style.color = '#555';
   fiveMinBtn.textContent = '5 Min Timer';

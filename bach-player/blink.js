@@ -55,6 +55,14 @@
   }
   draw();
 
+  // Sync: restart the beat at this instant (first flash/click fires now), so you can
+  // press it on a downbeat of the music and have the blink line up from there.
+  $('blinkSyncBtn').addEventListener('click', function () {
+    flashes.length = 0;
+    nextBeat = nowS();
+    if (clickOn) getCtx();
+  });
+
   slider.addEventListener('input', function () { setBpm(+slider.value); });
   clickBox.addEventListener('change', function () { clickOn = clickBox.checked; if (clickOn) getCtx(); save(); });
   // saved click=on needs one gesture in the popup before Chrome lets audio start

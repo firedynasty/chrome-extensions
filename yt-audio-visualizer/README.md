@@ -26,7 +26,7 @@ Based on the audio visualizer by [Nick Jones](https://codepen.io/nfj525/pen/rVBa
 1. Go to `chrome://extensions/`
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked**
-4. Select this `yt-transcript-extension` folder
+4. Select this `yt-audio-visualizer` folder
 5. Pin the extension to your toolbar for easy access
 
 ## Files
@@ -80,3 +80,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Waveform Strip
+
+**Toggle Waveform Strip** adds an Audacity-style amplitude history along the bottom of the page. It fills in as audio plays, so you can see where the loud sections are. If the page has a `<video>`/`<audio>`, the x-axis is the media position over its full duration (red playhead, click to seek, scrub back to see what you already played). Otherwise it scrolls by elapsed time. Only audio that has actually played is drawn (tab capture is real-time).

@@ -3,7 +3,7 @@
 
   const BAR_ID    = 'yt-controls-bar';
   const SPACER_ID = 'yt-controls-spacer';
-  const VER       = 8;
+  const VER       = 11;
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -67,6 +67,47 @@
 
   let _timeInterval = null;
 
+  // ── custom number-key spots ──────────────────────────────────────────────
+  // Text like "1=1:30, 2=5:00" maps number keys to timestamps, replacing
+  // YouTube's built-in 0-9 percentage jumps. Stored per video in localStorage.
+  let _spots = {};
+  let _keysInput = null;
+  let _kbHandler = null;
+
+  function keysStorageKey() {
+    return '__ytc_keys_' + (new URLSearchParams(location.search).get('v') || '');
+  }
+
+  // A colon is required in every time: m:ss or h:mm:ss. Anything else is
+  // reported in `bad` instead of being guessed at.
+  function parseSpots(text) {
+    const map = {};
+    const bad = [];
+    text.split(/[,\n]/).forEach(tok => {
+      const t = tok.trim();
+      if (!t) return;
+      const m = t.match(/^(\S)\s*=\s*(\d+(?::\d+){1,2})$/);
+      if (m) map[m[1]] = parseHMS(m[2]); else bad.push(t);
+    });
+    return { map, bad };
+  }
+
+  function loadSpots() {
+    let raw = '';
+    try { raw = localStorage.getItem(keysStorageKey()) || ''; } catch (e) {}
+    if (_keysInput) _keysInput.value = raw;
+    _spots = parseSpots(raw).map;
+  }
+
+  function saveSpots(text) {
+    try { localStorage.setItem(keysStorageKey(), text); } catch (e) {}
+    const { map, bad } = parseSpots(text);
+    _spots = map;
+    const n = Object.keys(map).length;
+    if (bad.length) flashStatus('Not understood: ' + bad.join(', ') + ' (use key=m:ss)', '#e74c3c');
+    else flashStatus(n + ' key' + (n === 1 ? '' : 's') + ' set', '#2ecc71');
+  }
+
   function startTimeClock(spanEl) {
     stopTimeClock();
     _timeInterval = setInterval(() => {
@@ -105,7 +146,8 @@
     t4Timeout = setTimeout(() => {
       if (gen !== t4Generation) return;
       t4LoopsRemaining--;
-      const seekTo = parseHMS(t4TsInput.value);
+      const seekTo = /^\d+(?::\d+){1,2}$/.test(t4TsInput.value.trim()) ? parseHMS(t4TsInput.value.trim()) : null;
+      if (seekTo === null) { cancelT4(t4Btn); flashStatus('Loop-back time needs a colon (m:ss)', '#e74c3c'); return; }
       const v = video(); if (v) v.currentTime = seekTo;
       if (t4LoopsRemaining > 0) {
         runT4Loop(t4Btn, t4TsInput, gen);
@@ -179,12 +221,7 @@
       return b;
     }
 
-    // ── skip buttons + custom skip + clock ────────────────────────────────
-    const skipBack10 = btn('−10s', '#2c3e50', '#e0e0e0', 'Skip back 10 seconds');
-    const skipFwd10  = btn('+10s', '#3ea6ff', '#000',    'Skip forward 10 seconds');
-    skipBack10.addEventListener('click', () => skip(-10));
-    skipFwd10 .addEventListener('click', () => skip(+10));
-
+    // ── custom skip + clock ────────────────────────────────
     const customInput = document.createElement('input');
     customInput.type = 'number';
     customInput.value = '15';
@@ -280,6 +317,29 @@
     `;
     t4Btn.addEventListener('click', () => toggleT4(t4Btn, t4TsInput));
 
+    // ── custom number-key spots ───────────────────────────────────────────
+    const keysInput = document.createElement('input');
+    keysInput.type = 'text';
+    keysInput.placeholder = '1=1:00';
+    keysInput.title = 'Number keys to jump to timestamps, e.g. 1=1:30, 2=5:00 (Enter to save). Overrides YouTube\'s 0-9 percentage jumps while the video is focused.';
+    keysInput.style.cssText = `
+      width: 150px;
+      padding: 3px 5px;
+      border: 1px solid #555;
+      border-radius: 5px;
+      background: #1a1a1a;
+      color: #ddd;
+      font-size: 11px;
+      font-family: monospace;
+    `;
+    keysInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { saveSpots(keysInput.value); keysInput.blur(); }
+    });
+    keysInput.addEventListener('keyup', (e) => e.stopPropagation());
+    keysInput.addEventListener('change', () => saveSpots(keysInput.value));
+    _keysInput = keysInput;
+
     // ── status flash ──────────────────────────────────────────────────────
     const statusSpan = document.createElement('span');
     statusSpan.style.cssText = 'font-size:11px; color:#888; white-space:nowrap; margin-left:4px;';
@@ -295,11 +355,25 @@
       }, 2500);
     };
 
-    bar.append(skipBack10, skipFwd10, customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, t4TsInput, t4Btn, statusSpan);
+    bar.append(customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, keysInput, t4TsInput, t4Btn, statusSpan);
 
     player.parentElement.insertBefore(bar, player);
     injectSpacer();
     startTimeClock(timeSpan);
+
+    loadSpots();
+    _kbHandler = function (e) {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!Object.prototype.hasOwnProperty.call(_spots, e.key)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const v = video();
+      if (!v) return;
+      v.currentTime = _spots[e.key];
+      flashStatus('Key ' + e.key + ' \u2192 ' + fmtTime(_spots[e.key]), '#64b5f6');
+    };
+    document.addEventListener('keydown', _kbHandler, true);
 
     chrome.storage.local.get('ytCtrlBarHidden', (data) => {
       if (data.ytCtrlBarHidden) bar.style.display = 'none';
@@ -321,6 +395,8 @@
   function removeBar() {
     stopTimeClock();
     _flashStatusFn = null;
+    _keysInput = null;
+    if (_kbHandler) { document.removeEventListener('keydown', _kbHandler, true); _kbHandler = null; }
     if (t4Timeout) { clearTimeout(t4Timeout); t4Timeout = null; t4Generation++; }
     document.getElementById(BAR_ID)?.remove();
     document.getElementById(SPACER_ID)?.remove();
@@ -330,7 +406,7 @@
 
   function handleNav() {
     if (location.pathname.startsWith('/watch')) {
-      if (document.getElementById(BAR_ID)) return;
+      if (document.getElementById(BAR_ID)) { loadSpots(); return; }
       let attempts = 0;
       const timer = setInterval(() => {
         if (document.querySelector('ytd-player')) {

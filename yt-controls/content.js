@@ -3,7 +3,7 @@
 
   const BAR_ID    = 'yt-controls-bar';
   const SPACER_ID = 'yt-controls-spacer';
-  const VER       = 11;
+  const VER       = 12;
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -67,45 +67,75 @@
 
   let _timeInterval = null;
 
-  // ── custom number-key spots ──────────────────────────────────────────────
-  // Text like "1=1:30, 2=5:00" maps number keys to timestamps, replacing
-  // YouTube's built-in 0-9 percentage jumps. Stored per video in localStorage.
-  let _spots = {};
-  let _keysInput = null;
-  let _kbHandler = null;
+  // ── timestamp pills ──────────────────────────────────────────────────────
+  // Type m:ss or h:mm:ss (colon required) + Enter to add a pill; click a pill
+  // to jump there. Stored per video in localStorage as a JSON array of seconds.
+  let _pills = [];
+  let _pillBox = null;
 
-  function keysStorageKey() {
-    return '__ytc_keys_' + (new URLSearchParams(location.search).get('v') || '');
+  function pillsStorageKey() {
+    return '__ytc_pills_' + (new URLSearchParams(location.search).get('v') || '');
   }
 
-  // A colon is required in every time: m:ss or h:mm:ss. Anything else is
-  // reported in `bad` instead of being guessed at.
-  function parseSpots(text) {
-    const map = {};
-    const bad = [];
-    text.split(/[,\n]/).forEach(tok => {
-      const t = tok.trim();
-      if (!t) return;
-      const m = t.match(/^(\S)\s*=\s*(\d+(?::\d+){1,2})$/);
-      if (m) map[m[1]] = parseHMS(m[2]); else bad.push(t);
+  function loadPills() {
+    let arr = [];
+    try { arr = JSON.parse(localStorage.getItem(pillsStorageKey()) || '[]'); } catch (e) {}
+    _pills = Array.isArray(arr) ? arr.filter(n => typeof n === 'number' && isFinite(n)) : [];
+    renderPills();
+  }
+
+  function savePills() {
+    try { localStorage.setItem(pillsStorageKey(), JSON.stringify(_pills)); } catch (e) {}
+  }
+
+  function renderPills() {
+    if (!_pillBox) return;
+    _pillBox.textContent = '';
+    _pills.forEach((sec, i) => {
+      const pill = document.createElement('span');
+      pill.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        background: #1e3a5f;
+        color: #90caf9;
+        font-size: 12px;
+        font-weight: 700;
+        font-family: 'Courier New', monospace;
+        overflow: hidden;
+      `;
+      const go = document.createElement('button');
+      go.textContent = fmtTime(sec);
+      go.title = 'Jump to ' + fmtTime(sec);
+      go.style.cssText = 'padding:3px 4px 3px 10px; border:none; background:none; color:inherit; font:inherit; cursor:pointer;';
+      go.addEventListener('click', () => {
+        const v = video();
+        if (v) v.currentTime = sec;
+      });
+      const del = document.createElement('button');
+      del.textContent = '×';
+      del.title = 'Remove';
+      del.style.cssText = 'padding:3px 8px 3px 2px; border:none; background:none; color:#6f8fb3; font:inherit; cursor:pointer;';
+      del.addEventListener('click', () => {
+        _pills.splice(i, 1);
+        savePills();
+        renderPills();
+      });
+      pill.append(go, del);
+      _pillBox.appendChild(pill);
     });
-    return { map, bad };
   }
 
-  function loadSpots() {
-    let raw = '';
-    try { raw = localStorage.getItem(keysStorageKey()) || ''; } catch (e) {}
-    if (_keysInput) _keysInput.value = raw;
-    _spots = parseSpots(raw).map;
-  }
-
-  function saveSpots(text) {
-    try { localStorage.setItem(keysStorageKey(), text); } catch (e) {}
-    const { map, bad } = parseSpots(text);
-    _spots = map;
-    const n = Object.keys(map).length;
-    if (bad.length) flashStatus('Not understood: ' + bad.join(', ') + ' (use key=m:ss)', '#e74c3c');
-    else flashStatus(n + ' key' + (n === 1 ? '' : 's') + ' set', '#2ecc71');
+  function addPillFromText(text) {
+    const t = text.trim();
+    if (!/^\d+(?::\d+){1,2}$/.test(t)) {
+      flashStatus('Use m:ss or h:mm:ss (colon required)', '#e74c3c');
+      return false;
+    }
+    _pills.push(parseHMS(t));
+    savePills();
+    renderPills();
+    return true;
   }
 
   function startTimeClock(spanEl) {
@@ -317,13 +347,13 @@
     `;
     t4Btn.addEventListener('click', () => toggleT4(t4Btn, t4TsInput));
 
-    // ── custom number-key spots ───────────────────────────────────────────
-    const keysInput = document.createElement('input');
-    keysInput.type = 'text';
-    keysInput.placeholder = '1=1:00';
-    keysInput.title = 'Number keys to jump to timestamps, e.g. 1=1:30, 2=5:00 (Enter to save). Overrides YouTube\'s 0-9 percentage jumps while the video is focused.';
-    keysInput.style.cssText = `
-      width: 150px;
+    // ── timestamp pills ───────────────────────────────────────────────────
+    const pillInput = document.createElement('input');
+    pillInput.type = 'text';
+    pillInput.placeholder = '1:00';
+    pillInput.title = 'Type a time (m:ss or h:mm:ss) and press Enter to add a pill you can click to jump there';
+    pillInput.style.cssText = `
+      width: 62px;
       padding: 3px 5px;
       border: 1px solid #555;
       border-radius: 5px;
@@ -332,13 +362,15 @@
       font-size: 11px;
       font-family: monospace;
     `;
-    keysInput.addEventListener('keydown', (e) => {
+    pillInput.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Enter') { saveSpots(keysInput.value); keysInput.blur(); }
+      if (e.key === 'Enter' && addPillFromText(pillInput.value)) pillInput.value = '';
     });
-    keysInput.addEventListener('keyup', (e) => e.stopPropagation());
-    keysInput.addEventListener('change', () => saveSpots(keysInput.value));
-    _keysInput = keysInput;
+    pillInput.addEventListener('keyup', (e) => e.stopPropagation());
+
+    const pillBox = document.createElement('span');
+    pillBox.style.cssText = 'display:inline-flex; flex-wrap:wrap; gap:5px; align-items:center;';
+    _pillBox = pillBox;
 
     // ── status flash ──────────────────────────────────────────────────────
     const statusSpan = document.createElement('span');
@@ -355,25 +387,13 @@
       }, 2500);
     };
 
-    bar.append(customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, keysInput, t4TsInput, t4Btn, statusSpan);
+    bar.append(customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, pillInput, pillBox, t4TsInput, t4Btn, statusSpan);
 
     player.parentElement.insertBefore(bar, player);
     injectSpacer();
     startTimeClock(timeSpan);
 
-    loadSpots();
-    _kbHandler = function (e) {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (!Object.prototype.hasOwnProperty.call(_spots, e.key)) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const v = video();
-      if (!v) return;
-      v.currentTime = _spots[e.key];
-      flashStatus('Key ' + e.key + ' \u2192 ' + fmtTime(_spots[e.key]), '#64b5f6');
-    };
-    document.addEventListener('keydown', _kbHandler, true);
+    loadPills();
 
     chrome.storage.local.get('ytCtrlBarHidden', (data) => {
       if (data.ytCtrlBarHidden) bar.style.display = 'none';
@@ -395,8 +415,7 @@
   function removeBar() {
     stopTimeClock();
     _flashStatusFn = null;
-    _keysInput = null;
-    if (_kbHandler) { document.removeEventListener('keydown', _kbHandler, true); _kbHandler = null; }
+    _pillBox = null;
     if (t4Timeout) { clearTimeout(t4Timeout); t4Timeout = null; t4Generation++; }
     document.getElementById(BAR_ID)?.remove();
     document.getElementById(SPACER_ID)?.remove();
@@ -406,7 +425,7 @@
 
   function handleNav() {
     if (location.pathname.startsWith('/watch')) {
-      if (document.getElementById(BAR_ID)) { loadSpots(); return; }
+      if (document.getElementById(BAR_ID)) { loadPills(); return; }
       let attempts = 0;
       const timer = setInterval(() => {
         if (document.querySelector('ytd-player')) {

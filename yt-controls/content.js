@@ -3,7 +3,7 @@
 
   const BAR_ID    = 'yt-controls-bar';
   const SPACER_ID = 'yt-controls-spacer';
-  const VER       = 12;
+  const VER       = 13;
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -72,6 +72,7 @@
   // to jump there. Stored per video in localStorage as a JSON array of seconds.
   let _pills = [];
   let _pillBox = null;
+  let _pillClear = null;
 
   function pillsStorageKey() {
     return '__ytc_pills_' + (new URLSearchParams(location.search).get('v') || '');
@@ -91,7 +92,8 @@
   function renderPills() {
     if (!_pillBox) return;
     _pillBox.textContent = '';
-    _pills.forEach((sec, i) => {
+    if (_pillClear) _pillClear.style.display = _pills.length ? '' : 'none';
+    _pills.forEach((sec) => {
       const pill = document.createElement('span');
       pill.style.cssText = `
         display: inline-flex;
@@ -107,21 +109,12 @@
       const go = document.createElement('button');
       go.textContent = fmtTime(sec);
       go.title = 'Jump to ' + fmtTime(sec);
-      go.style.cssText = 'padding:3px 4px 3px 10px; border:none; background:none; color:inherit; font:inherit; cursor:pointer;';
+      go.style.cssText = 'padding:3px 10px; border:none; background:none; color:inherit; font:inherit; cursor:pointer;';
       go.addEventListener('click', () => {
         const v = video();
         if (v) v.currentTime = sec;
       });
-      const del = document.createElement('button');
-      del.textContent = '×';
-      del.title = 'Remove';
-      del.style.cssText = 'padding:3px 8px 3px 2px; border:none; background:none; color:#6f8fb3; font:inherit; cursor:pointer;';
-      del.addEventListener('click', () => {
-        _pills.splice(i, 1);
-        savePills();
-        renderPills();
-      });
-      pill.append(go, del);
+      pill.appendChild(go);
       _pillBox.appendChild(pill);
     });
   }
@@ -372,6 +365,15 @@
     pillBox.style.cssText = 'display:inline-flex; flex-wrap:wrap; gap:5px; align-items:center;';
     _pillBox = pillBox;
 
+    const pillClear = btn('Clear', '#6b1a1a', '#fff', 'Remove all pills for this video');
+    pillClear.style.display = 'none';
+    pillClear.addEventListener('click', () => {
+      _pills = [];
+      savePills();
+      renderPills();
+    });
+    _pillClear = pillClear;
+
     // ── status flash ──────────────────────────────────────────────────────
     const statusSpan = document.createElement('span');
     statusSpan.style.cssText = 'font-size:11px; color:#888; white-space:nowrap; margin-left:4px;';
@@ -387,7 +389,7 @@
       }, 2500);
     };
 
-    bar.append(customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, pillInput, pillBox, t4TsInput, t4Btn, statusSpan);
+    bar.append(customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, pillInput, pillBox, pillClear, t4TsInput, t4Btn, statusSpan);
 
     player.parentElement.insertBefore(bar, player);
     injectSpacer();
@@ -416,6 +418,7 @@
     stopTimeClock();
     _flashStatusFn = null;
     _pillBox = null;
+    _pillClear = null;
     if (t4Timeout) { clearTimeout(t4Timeout); t4Timeout = null; t4Generation++; }
     document.getElementById(BAR_ID)?.remove();
     document.getElementById(SPACER_ID)?.remove();

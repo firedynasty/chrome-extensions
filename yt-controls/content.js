@@ -3,7 +3,7 @@
 
   const BAR_ID    = 'yt-controls-bar';
   const SPACER_ID = 'yt-controls-spacer';
-  const VER       = 13;
+  const VER       = 14;
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -66,6 +66,22 @@
   }
 
   let _timeInterval = null;
+
+  // ── birds (ambient loop with own volume slider) ─────────────────────────
+  // Same Forest Birdsong track as bach-player's nature mixer.
+  const BIRDS_URL = 'https://www.dropbox.com/scl/fi/kkadbn85fwekyuh6i2gbd/Forest-Birdsong-Nature-Sounds-trimmed-30min-loudnorm-2G8LAiHSCAs.m4a?rlkey=p2copybzvpcs9y3xy7yzcs7as&st=3d3ew408&raw=1';
+  const BIRDS_VOL_KEY = '__ytc_birds_vol';
+  let _birds = null;
+
+  function birdsVolume() {
+    let v = 30;
+    try { const n = parseInt(localStorage.getItem(BIRDS_VOL_KEY), 10); if (n >= 0 && n <= 100) v = n; } catch (e) {}
+    return v;
+  }
+
+  function stopBirds() {
+    if (_birds) { _birds.pause(); _birds.removeAttribute('src'); _birds.load(); _birds = null; }
+  }
 
   // ── timestamp pills ──────────────────────────────────────────────────────
   // Type m:ss or h:mm:ss (colon required) + Enter to add a pill; click a pill
@@ -340,6 +356,43 @@
     `;
     t4Btn.addEventListener('click', () => toggleT4(t4Btn, t4TsInput));
 
+    // ── birds button + volume slider ──────────────────────────────────────
+    const birdsBtn = btn('🐦', '#37474f', '#fff', 'Toggle forest birdsong');
+    const birdsSlider = document.createElement('input');
+    birdsSlider.type = 'range';
+    birdsSlider.min = '0';
+    birdsSlider.max = '100';
+    birdsSlider.value = String(birdsVolume());
+    birdsSlider.title = 'Birds volume';
+    birdsSlider.style.cssText = 'width: 80px; cursor: pointer;';
+    function setBirdsOn(on) {
+      birdsBtn.style.background = on ? '#2e7d32' : '#37474f';
+    }
+    birdsBtn.addEventListener('click', () => {
+      if (_birds) { stopBirds(); setBirdsOn(false); flashStatus('Birds off', '#888'); return; }
+      const a = new Audio(BIRDS_URL);
+      a.loop = true;
+      a.volume = birdsSlider.value / 100;
+      a.addEventListener('error', () => {
+        if (_birds !== a) return;
+        stopBirds(); setBirdsOn(false);
+        flashStatus('Birds unavailable', '#e74c3c');
+      });
+      _birds = a;
+      setBirdsOn(true);
+      a.play().then(() => flashStatus('Birds on', '#2ecc71')).catch(() => {
+        if (_birds !== a) return;
+        stopBirds(); setBirdsOn(false);
+        flashStatus('Birds blocked', '#e74c3c');
+      });
+    });
+    birdsSlider.addEventListener('input', () => {
+      if (_birds) _birds.volume = birdsSlider.value / 100;
+      try { localStorage.setItem(BIRDS_VOL_KEY, birdsSlider.value); } catch (e) {}
+    });
+    birdsSlider.addEventListener('keydown', (e) => e.stopPropagation());
+    birdsSlider.addEventListener('keyup',   (e) => e.stopPropagation());
+
     // ── timestamp pills ───────────────────────────────────────────────────
     const pillInput = document.createElement('input');
     pillInput.type = 'text';
@@ -389,7 +442,7 @@
       }, 2500);
     };
 
-    bar.append(customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, pillInput, pillBox, pillClear, t4TsInput, t4Btn, statusSpan);
+    bar.append(customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, birdsBtn, birdsSlider, pillInput, pillBox, pillClear, t4TsInput, t4Btn, statusSpan);
 
     player.parentElement.insertBefore(bar, player);
     injectSpacer();
@@ -419,6 +472,7 @@
     _flashStatusFn = null;
     _pillBox = null;
     _pillClear = null;
+    stopBirds();
     if (t4Timeout) { clearTimeout(t4Timeout); t4Timeout = null; t4Generation++; }
     document.getElementById(BAR_ID)?.remove();
     document.getElementById(SPACER_ID)?.remove();

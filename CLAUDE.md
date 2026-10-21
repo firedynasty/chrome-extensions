@@ -33,6 +33,9 @@ Select any text on a page and a tooltip appears beside it with a one-click Copy 
 ### transcript-notes (Paste, Click, Collect)
 Source-agnostic note-taking from any pasted transcript (Coursera, lectures, talks). Toolbar-icon toggle, no popup. Paste via a textarea or direct `navigator.clipboard.readText()` (with manual-paste fallback when blocked); text is split into sentences (`.?!` boundaries, line-split fallback for punctuation-less caption dumps) with `[MUSIC]`/`[APPLAUSE]`-style noise markers stripped. Rows toggle-collect on click (green), typed notes append via an input row. Export = all entries in insertion order (sentences and typed notes interleaved as collected), blank-line separated, via clipboard copy or a Blob-URL `.txt` download. Version-stamped singleton (`window.__tnx`).
 
+### gradient (Gradient Line)
+A thin moving spectrum line fixed to the top of any page. Toolbar-icon toggle via `action.onClicked` service worker, no popup; click again to remove. Animated with the Web Animations API (CSP-safe, static under reduced-motion). Standalone replacement for the activity line inside yt-controls. Version-stamped singleton (`window.__grd`).
+
 ## Conventions
 
 - All extensions use Manifest V3 with minimal permissions (`activeTab` + `scripting`)

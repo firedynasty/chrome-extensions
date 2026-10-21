@@ -3,7 +3,7 @@
 
   const BAR_ID    = 'yt-controls-bar';
   const SPACER_ID = 'yt-controls-spacer';
-  const VER       = 14;
+  const VER       = 18;
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -68,8 +68,8 @@
   let _timeInterval = null;
 
   // ── birds (ambient loop with own volume slider) ─────────────────────────
-  // Same Forest Birdsong track as bach-player's nature mixer.
-  const BIRDS_URL = 'https://www.dropbox.com/scl/fi/kkadbn85fwekyuh6i2gbd/Forest-Birdsong-Nature-Sounds-trimmed-30min-loudnorm-2G8LAiHSCAs.m4a?rlkey=p2copybzvpcs9y3xy7yzcs7as&st=3d3ew408&raw=1';
+  // Forest Birdsong (mp3), streamed from Dropbox.
+  const BIRDS_URL = 'https://www.dropbox.com/scl/fi/x09bfk82awmzt89r1oxtp/Forest-Birdsong-Nature-Sounds-trimmed-30min-loudnorm-2G8LAiHSCAs.mp3?rlkey=7pydzw8pia681zyfijrjszqwi&st=mowf7s9e&raw=1';
   const BIRDS_VOL_KEY = '__ytc_birds_vol';
   let _birds = null;
 
@@ -147,11 +147,32 @@
     return true;
   }
 
+  // ── activity line: spectrum strip under the bar while birds or the loop timer run
+  let _activeLine = null;
+  let _activeLineAnim = null;
+
+  function updateActiveLine() {
+    if (!_activeLine) return;
+    const on = !!(_birds || t4Timeout);
+    _activeLine.style.display = on ? 'block' : 'none';
+    if (on && !_activeLineAnim && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      // Web Animations API (no <style> keyframes, so page CSP can't block it)
+      _activeLineAnim = _activeLine.animate(
+        [{ backgroundPosition: '0 0' }, { backgroundPosition: '-200% 0' }],
+        { duration: 5000, iterations: Infinity, easing: 'linear' }
+      );
+    } else if (!on && _activeLineAnim) {
+      _activeLineAnim.cancel();
+      _activeLineAnim = null;
+    }
+  }
+
   function startTimeClock(spanEl) {
     stopTimeClock();
     _timeInterval = setInterval(() => {
       const v = video();
       spanEl.textContent = v ? fmtTime(v.currentTime) : '--:--';
+      updateActiveLine();
     }, 500);
   }
 
@@ -160,14 +181,40 @@
   }
 
   // ── 3m repeat timer (x8) ────────────────────────────────────────────────
-  const T4_DURATION_MS = 3 * 60 * 1000; // 3 minutes
-  const T4_TOTAL_LOOPS = 8;
+  const T4_DEFAULT_SECS = 180; // 3 minutes
+  const T4_LEN_KEY = '__ytc_loop_secs';
+  const T4_DEFAULT_LOOPS = 8;
+  const T4_LOOPS_KEY = '__ytc_loop_count';
+  let _t4LenInput = null;
+  let _t4CountInput = null;
   let t4Timeout = null;
-  let t4LoopsRemaining = 0;
+  let t4Done = 0;
   let t4Generation = 0;
 
+  // Loop length in seconds, read from the number box (falls back to 3m)
+  function t4Secs() {
+    const n = _t4LenInput ? parseFloat(_t4LenInput.value) : NaN;
+    return isFinite(n) && n >= 1 ? n : T4_DEFAULT_SECS;
+  }
+
+  // Number of repeats, read from the x-box (whole number 1-99, falls back to 8)
+  function t4Loops() {
+    const n = _t4CountInput ? parseInt(_t4CountInput.value, 10) : NaN;
+    return n >= 1 && n <= 99 ? n : T4_DEFAULT_LOOPS;
+  }
+
+  function t4Name(secs) {
+    return secs >= 60 && secs % 60 === 0 ? (secs / 60) + 'm' : secs + 's';
+  }
+
+  function updateT4Idle(t4Btn) {
+    const name = t4Name(t4Secs());
+    t4Btn.textContent = '⏱️ ' + name;
+    t4Btn.title = 'Play ' + name + ', rewind, repeat x' + t4Loops();
+  }
+
   function resetT4Btn(t4Btn) {
-    t4Btn.textContent = '⏱️ 3m';
+    updateT4Idle(t4Btn);
     t4Btn.style.background = 'linear-gradient(45deg,#ab47bc,#8e24aa)';
   }
 
@@ -179,23 +226,24 @@
   }
 
   function runT4Loop(t4Btn, t4TsInput, gen) {
-    const currentLoop = T4_TOTAL_LOOPS - t4LoopsRemaining + 1;
-    t4Btn.textContent = `⏹️ ${currentLoop}/${T4_TOTAL_LOOPS}`;
-    flashStatus(`3m loop ${currentLoop}/${T4_TOTAL_LOOPS}`, '#ab47bc');
+    const currentLoop = t4Done + 1;
+    t4Btn.textContent = `⏹️ ${currentLoop}/${t4Loops()}`;
+    const loopSecs = t4Secs();
+    flashStatus(`${t4Name(loopSecs)} loop ${currentLoop}/${t4Loops()}`, '#ab47bc');
     t4Timeout = setTimeout(() => {
       if (gen !== t4Generation) return;
-      t4LoopsRemaining--;
+      t4Done++;
       const seekTo = /^\d+(?::\d+){1,2}$/.test(t4TsInput.value.trim()) ? parseHMS(t4TsInput.value.trim()) : null;
       if (seekTo === null) { cancelT4(t4Btn); flashStatus('Loop-back time needs a colon (m:ss)', '#e74c3c'); return; }
       const v = video(); if (v) v.currentTime = seekTo;
-      if (t4LoopsRemaining > 0) {
+      if (t4Done < t4Loops()) {
         runT4Loop(t4Btn, t4TsInput, gen);
       } else {
         t4Timeout = null;
         resetT4Btn(t4Btn);
-        flashStatus(`3m complete (${T4_TOTAL_LOOPS}/${T4_TOTAL_LOOPS})`, '#2ecc71');
+        flashStatus(`${t4Name(loopSecs)} complete (${t4Done}/${t4Done})`, '#2ecc71');
       }
-    }, T4_DURATION_MS);
+    }, loopSecs * 1000);
   }
 
   function toggleT4(t4Btn, t4TsInput) {
@@ -204,7 +252,7 @@
     if (!v) { flashStatus('No video', '#e74c3c'); return; }
     // Default loop-back point = where you are now; edit the input to override
     t4TsInput.value = secsToHMS(v.currentTime);
-    t4LoopsRemaining = T4_TOTAL_LOOPS;
+    t4Done = 0;
     t4Generation++;
     runT4Loop(t4Btn, t4TsInput, t4Generation);
   }
@@ -340,9 +388,55 @@
     t4TsInput.addEventListener('keydown', (e) => e.stopPropagation());
     t4TsInput.addEventListener('keyup',   (e) => e.stopPropagation());
 
+    const t4LenInput = document.createElement('input');
+    t4LenInput.type = 'number';
+    t4LenInput.min = '1';
+    t4LenInput.title = 'Loop length in seconds (180 = 3m). Applies from the next loop if the timer is running.';
+    t4LenInput.style.cssText = `
+      width: 52px;
+      padding: 3px 5px;
+      border: 1px solid #555;
+      border-radius: 5px;
+      background: #1a1a1a;
+      color: #ddd;
+      font-size: 12px;
+      font-family: monospace;
+    `;
+    let savedLen = T4_DEFAULT_SECS;
+    try { const n = parseFloat(localStorage.getItem(T4_LEN_KEY)); if (isFinite(n) && n >= 1) savedLen = n; } catch (e) {}
+    t4LenInput.value = String(savedLen);
+    t4LenInput.addEventListener('keydown', (e) => e.stopPropagation());
+    t4LenInput.addEventListener('keyup',   (e) => e.stopPropagation());
+    _t4LenInput = t4LenInput;
+
+    const t4CountInput = document.createElement('input');
+    t4CountInput.type = 'number';
+    t4CountInput.min = '1';
+    t4CountInput.max = '99';
+    t4CountInput.title = 'Number of repeats (1-99). Applies from the next loop if the timer is running.';
+    t4CountInput.style.cssText = `
+      width: 38px;
+      padding: 3px 4px;
+      border: 1px solid #555;
+      border-radius: 5px;
+      background: #1a1a1a;
+      color: #ddd;
+      font-size: 12px;
+      font-family: monospace;
+    `;
+    let savedCount = T4_DEFAULT_LOOPS;
+    try { const n = parseInt(localStorage.getItem(T4_LOOPS_KEY), 10); if (n >= 1 && n <= 99) savedCount = n; } catch (e) {}
+    t4CountInput.value = String(savedCount);
+    t4CountInput.addEventListener('keydown', (e) => e.stopPropagation());
+    t4CountInput.addEventListener('keyup',   (e) => e.stopPropagation());
+    _t4CountInput = t4CountInput;
+
+    const t4CountX = document.createElement('span');
+    t4CountX.textContent = '\u00D7';
+    t4CountX.style.cssText = 'color:#888; font-size:12px; margin-right:-3px;';
+
     const t4Btn = document.createElement('button');
-    t4Btn.textContent = '⏱️ 3m';
-    t4Btn.title = 'Play 3m, rewind, repeat x8';
+    updateT4Idle(t4Btn);
     t4Btn.style.cssText = `
       padding: 5px 12px;
       border: none;
@@ -355,6 +449,14 @@
       white-space: nowrap;
     `;
     t4Btn.addEventListener('click', () => toggleT4(t4Btn, t4TsInput));
+    t4CountInput.addEventListener('input', () => {
+      try { localStorage.setItem(T4_LOOPS_KEY, t4CountInput.value); } catch (e) {}
+      if (!t4Timeout) updateT4Idle(t4Btn);
+    });
+    t4LenInput.addEventListener('input', () => {
+      try { localStorage.setItem(T4_LEN_KEY, t4LenInput.value); } catch (e) {}
+      if (!t4Timeout) updateT4Idle(t4Btn);
+    });
 
     // ── birds button + volume slider ──────────────────────────────────────
     const birdsBtn = btn('🐦', '#37474f', '#fff', 'Toggle forest birdsong');
@@ -442,7 +544,20 @@
       }, 2500);
     };
 
-    bar.append(customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, birdsBtn, birdsSlider, pillInput, pillBox, pillClear, t4TsInput, t4Btn, statusSpan);
+    // ── activity line (spectrum strip along the bottom edge of the bar) ───
+    const activeLine = document.createElement('div');
+    activeLine.style.cssText = `
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 3px;
+      display: none;
+      pointer-events: none;
+      background: linear-gradient(90deg, #d32f2f, #e07b2e, #f5e050, #8fe03a, #4cb85a, #6ff2ff, #3f8fe0, #5a1fc4, #d32f2f);
+      background-size: 200% 100%;
+    `;
+    _activeLine = activeLine;
+
+    bar.append(customInput, customGo, timeSpan, volDownBtn, volUpBtn, speedBtn, birdsBtn, birdsSlider, pillInput, pillBox, pillClear, t4TsInput, t4LenInput, t4CountX, t4CountInput, t4Btn, statusSpan, activeLine);
 
     player.parentElement.insertBefore(bar, player);
     injectSpacer();
@@ -472,7 +587,11 @@
     _flashStatusFn = null;
     _pillBox = null;
     _pillClear = null;
+    if (_activeLineAnim) { _activeLineAnim.cancel(); _activeLineAnim = null; }
+    _activeLine = null;
     stopBirds();
+    _t4LenInput = null;
+    _t4CountInput = null;
     if (t4Timeout) { clearTimeout(t4Timeout); t4Timeout = null; t4Generation++; }
     document.getElementById(BAR_ID)?.remove();
     document.getElementById(SPACER_ID)?.remove();

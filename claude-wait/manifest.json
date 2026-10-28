@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Claude Wait",
+  "version": "1.0",
+  "description": "A Wait button for any page: a border shows while your Claude Code session is working and disappears when it finishes. Needs claude_hooks_server running locally.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://127.0.0.1:8787/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    },
+    "default_title": "Claude Wait button"
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

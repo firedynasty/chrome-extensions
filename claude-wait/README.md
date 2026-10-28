@@ -2,7 +2,7 @@
 
 A **Wait** button you can put on any page. Click it while a Claude Code session is working: a pulsing border shows on the button, and when Claude finishes the border is removed and the button disarms.
 
-It needs the local server from `claude_hooks_server` running, because that is where the "is Claude working" state comes from. If it is not running, the button shows **Need local server: run node server.js in claude_hooks_server**.
+It needs the local server from `claude_hooks_server` running, because that is where the "is Claude working" state comes from. If it is not running, the button shows the server folder path (`.../claude_hooks_server`) in red, ready to copy: `cd` there and run `node server.js`.
 
 ## Install
 

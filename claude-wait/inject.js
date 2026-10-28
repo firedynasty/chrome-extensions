@@ -6,7 +6,7 @@
 // PURE ASCII string literals: non-ASCII display chars use String.fromCharCode
 // so page charset misdetection can never mangle them.
 (function () {
-  const VERSION = 1;
+  const VERSION = 2;
   const ROOT_ID = '__cwt_root';
   const POLL_MS = 1000;
   const X = String.fromCharCode(0x2715);   // x mark
@@ -90,7 +90,7 @@
     if (!armed) return;
     if (!res.ok) {
       border(null);
-      setNote('Need local server: run node server.js in claude_hooks_server', '#ff7b72');
+      setNote('/Users/stanleytan/Documents/technical/github/claude_hooks_server', '#ff7b72');   // path only, easy to copy
       return;
     }
     if (res.state === 'working') {

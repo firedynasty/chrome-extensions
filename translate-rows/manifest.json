@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Translate Rows",
+  "version": "1.0",
+  "description": "Paste text, get one row per line, click a row to open its Google Translate in a new tab.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Translate Rows",
+    "default_icon": { "48": "icon48.png", "128": "icon128.png" }
+  },
+  "icons": { "48": "icon48.png", "128": "icon128.png" }
+}

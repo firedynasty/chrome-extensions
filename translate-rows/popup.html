@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { width: 380px; margin: 0; padding: 12px; font: 13px system-ui, sans-serif; background: #1a1e3c; color: #e8e8f4; }
+  textarea { width: 100%; box-sizing: border-box; height: 90px; background: #0a0e28; color: inherit; border: 1px solid #3a4070; border-radius: 6px; padding: 6px; font: inherit; resize: vertical; }
+  .bar { display: flex; gap: 6px; align-items: center; margin: 8px 0; }
+  select.lang { max-width: 120px; background: #0a0e28; color: inherit; border: 1px solid #3a4070; border-radius: 4px; padding: 3px 4px; font: inherit; }
+  button { background: #3a4070; color: inherit; border: 0; border-radius: 4px; padding: 4px 8px; cursor: pointer; font: inherit; }
+  button:hover { background: #50589a; }
+  .sp { flex: 1; }
+  #rows { max-height: 300px; overflow-y: auto; }
+  .row { display: flex; gap: 8px; padding: 6px 8px; margin-bottom: 4px; background: #262b55; border-radius: 4px; cursor: pointer; }
+  .row:hover { background: #3a4070; }
+  .row.done { opacity: .5; }
+  .n { color: #9aa3e8; min-width: 18px; }
+  .hint { color: #8d93c4; font-size: 11px; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <textarea id="txt" placeholder="Paste text (one line per row) or a translate.google.com URL..."></textarea>
+  <div class="bar">
+    <select id="sl" class="lang" title="Source language"></select>
+    <span>&rarr;</span>
+    <select id="tl" class="lang" title="Target language"></select>
+    <span class="sp"></span>
+    <button id="paste">Paste</button>
+    <button id="clear">Clear</button>
+  </div>
+  <div id="rows"></div>
+  <div class="hint">Click a row to open its translation. Cmd/Ctrl-click opens in the background.</div>
+  <script src="popup.js"></script>
+</body>
+</html>

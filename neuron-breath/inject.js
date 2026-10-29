@@ -3,7 +3,7 @@
 
   // Version-stamped singleton: a click on an up-to-date copy toggles it off;
   // a stale copy from an older version is torn down and replaced.
-  const VERSION = 3;
+  const VERSION = 4;
   const HOST_ID = '__nbr-host';
 
   const prev = window.__nbr;
@@ -58,7 +58,9 @@
   const checkBtn = el('button', BTN, 'Check');
   const newBtn = el('button', BTN, 'New dots');
   const result = el('span', 'font:600 14px system-ui, sans-serif; color:#ffd98a;');
-  bar.append(guess, checkBtn, newBtn, result);
+  // stopwatch next to New dots: starts at 0:00 when the Dots tab opens, resets on leaving it
+  const dotsClock = el('span', 'font:600 14px system-ui, sans-serif; color:rgba(255,255,255,.8); font-variant-numeric:tabular-nums;', '0:00');
+  bar.append(guess, checkBtn, newBtn, dotsClock, result);
 
   const breathInfo = el('div', 'flex:none; padding:10px 14px; text-align:center; font:13px system-ui, sans-serif; color:rgba(40,40,70,.75);');
   breathInfo.textContent = 'Box breathing: in 4, hold 4, out 4, hold 4';
@@ -117,7 +119,8 @@
     { label: 'Hold', grow: 0 },
   ];
   const PHASE_S = 4, CYCLE_S = PHASE_S * PHASES.length;
-  let breathStart = 0;
+  let breathStart = 0, dotsStart = 0;
+  function fmtClock(sec) { const t = Math.floor(sec); return Math.floor(t / 60) + ':' + (t % 60 < 10 ? '0' : '') + (t % 60); }
 
   let mode = 'dots';
   function setMode(m) {
@@ -129,6 +132,7 @@
     tabDots.style.cssText = BTN + (m === 'dots' ? act : '');
     tabBreath.style.cssText = BTN + (m === 'breath' ? act : '');
     if (m === 'breath') breathStart = performance.now();
+    else { dotsStart = performance.now(); dotsClock.textContent = '0:00'; }
     // the breath screen is light, so the top buttons need dark text there
     const fg = m === 'dots' ? '#fff' : '#3b3a5c';
     [tabDots, tabBreath, closeBtn].forEach((b) => {
@@ -255,13 +259,11 @@
     g.stroke();
 
     // stopwatch since this Breathe session started (resets on tab switch / close)
-    const tot = Math.floor(el_s);
-    const mm = Math.floor(tot / 60), ss = tot % 60;
     g.fillStyle = '#6b6a8a';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.font = '600 ' + Math.max(16, Math.round(maxR * 0.14)) + 'px system-ui, sans-serif';
-    g.fillText(mm + ':' + (ss < 10 ? '0' : '') + ss, cx, Math.max(22, cy - ringR - maxR * 0.16));
+    g.fillText(fmtClock(el_s), cx, Math.max(22, cy - ringR - maxR * 0.16));
 
     // phase label and seconds left
     g.fillStyle = '#5b5a80';
@@ -277,7 +279,7 @@
   function frame(now) {
     raf = requestAnimationFrame(frame);
     g.setTransform(DPR, 0, 0, DPR, 0, 0);
-    if (mode === 'dots') drawDots(now / 1000);
+    if (mode === 'dots') { drawDots(now / 1000); dotsClock.textContent = fmtClock((now - dotsStart) / 1000); }
     else drawBreath(now);
   }
 

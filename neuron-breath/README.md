@@ -4,7 +4,7 @@ A short break from thinking on the computer. Click the toolbar icon and an overl
 
 ## Dots
 
-A glowing network of dots joined by thin lines (a nod to the brain-neurons picture). Look at it, estimate how many dots there are, type your guess into **Your count** and press **Check** (or Enter) to see the real number and how far off you were. **New dots** draws a fresh network of 18-60 dots.
+A glowing network of dots joined by thin lines (a nod to the brain-neurons picture). Look at it, estimate how many dots there are, type your guess into **Your count** and press **Check** (or Enter) to see the real number and how far off you were. **New dots** draws a fresh network of 18-60 dots. A stopwatch next to it counts this session; it starts at 0:00 when the Dots tab opens and resets when you switch tabs or close the overlay (New dots does not reset it).
 
 ## Breathe
 

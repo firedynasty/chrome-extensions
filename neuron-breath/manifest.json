@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Neuron Breath",
+  "version": "1.0",
+  "description": "A glowing network of dots to estimate, plus 4-4-4-4 box breathing. Toggle on/off via the toolbar icon.",
+  "permissions": ["activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    },
+    "default_title": "Dots and breathing break"
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

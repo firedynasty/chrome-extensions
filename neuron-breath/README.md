@@ -10,6 +10,10 @@ A glowing network of dots joined by thin lines (a nod to the brain-neurons pictu
 
 Box breathing, 4 seconds each: breathe in, hold, breathe out, hold. A white circle grows and shrinks with the breath, a ring fills around it over the 16-second cycle, and the current phase and seconds left are shown inside. A stopwatch above the ring counts the time of this session; it starts at 0:00 when you open Breathe and resets when you switch back to Dots or close the overlay.
 
+## Notes
+
+A 3-line notes box sits at the bottom of both tabs. It saves automatically and is shared across all sites and sessions (stored with `chrome.storage.local`, which is why this extension asks for the `storage` permission). Drag its corner to make it taller.
+
 ## Usage
 
 - Click the toolbar icon to open the overlay; click it again, press **Esc**, click **Close**, or click outside the panel to close it

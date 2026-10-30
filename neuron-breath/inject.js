@@ -3,7 +3,7 @@
 
   // Version-stamped singleton: a click on an up-to-date copy toggles it off;
   // a stale copy from an older version is torn down and replaced.
-  const VERSION = 4;
+  const VERSION = 5;
   const HOST_ID = '__nbr-host';
 
   const prev = window.__nbr;
@@ -65,7 +65,35 @@
   const breathInfo = el('div', 'flex:none; padding:10px 14px; text-align:center; font:13px system-ui, sans-serif; color:rgba(40,40,70,.75);');
   breathInfo.textContent = 'Box breathing: in 4, hold 4, out 4, hold 4';
 
-  panel.append(top, stage, bar, breathInfo);
+  // notes: kept in chrome.storage.local so they follow you across sites and sessions
+  // (localStorage would be per-website); falls back to localStorage if that is unavailable
+  const NOTE_KEY = 'nbr-notes';
+  const store = (window.chrome && chrome.storage && chrome.storage.local) ? chrome.storage.local : null;
+  const notesWrap = el('div', 'flex:none; padding:0 14px 12px;');
+  const notes = el('textarea', 'display:block; width:100%; box-sizing:border-box; resize:vertical; min-height:3.4em;' +
+    'padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.35); font:14px/1.4 system-ui, sans-serif;');
+  notes.rows = 3;
+  notes.placeholder = 'Notes (saved automatically)';
+  notesWrap.appendChild(notes);
+
+  let noteTimer = 0;
+  function saveNotes() {
+    clearTimeout(noteTimer);
+    try {
+      if (store) store.set({ [NOTE_KEY]: notes.value });
+      else localStorage.setItem(NOTE_KEY, notes.value);
+    } catch (e) {}
+  }
+  notes.addEventListener('input', () => { clearTimeout(noteTimer); noteTimer = setTimeout(saveNotes, 400); });
+  try {
+    if (store) {
+      store.get(NOTE_KEY).then((r) => { if (r && r[NOTE_KEY] && !notes.value) notes.value = r[NOTE_KEY]; });
+    } else {
+      notes.value = localStorage.getItem(NOTE_KEY) || '';
+    }
+  } catch (e) {}
+
+  panel.append(top, stage, bar, breathInfo, notesWrap);
   root.append(backdrop, panel);
   (document.body || document.documentElement).appendChild(host);
 
@@ -128,6 +156,9 @@
     bar.style.display = m === 'dots' ? 'flex' : 'none';
     breathInfo.style.display = m === 'breath' ? 'block' : 'none';
     panel.style.background = m === 'dots' ? '#0b2a36' : '#e9e6fb';
+    notes.style.background = m === 'dots' ? 'rgba(0,0,0,.35)' : 'rgba(255,255,255,.7)';
+    notes.style.color = m === 'dots' ? '#fff' : '#3b3a5c';
+    notes.style.borderColor = m === 'dots' ? 'rgba(255,255,255,.35)' : 'rgba(59,58,92,.35)';
     const act = 'background:rgba(255,255,255,.3);';
     tabDots.style.cssText = BTN + (m === 'dots' ? act : '');
     tabBreath.style.cssText = BTN + (m === 'breath' ? act : '');
@@ -315,6 +346,7 @@
     version: VERSION,
     teardown() {
       cancelAnimationFrame(raf);
+      if (noteTimer) saveNotes();
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onEsc, true);
       host.remove();

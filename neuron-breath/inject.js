@@ -3,7 +3,7 @@
 
   // Version-stamped singleton: a click on an up-to-date copy toggles it off;
   // a stale copy from an older version is torn down and replaced.
-  const VERSION = 5;
+  const VERSION = 6;
   const HOST_ID = '__nbr-host';
 
   const prev = window.__nbr;
@@ -41,12 +41,24 @@
   const top = el('div', 'flex:none; display:flex; align-items:center; gap:8px; padding:10px 14px;');
   const tabDots = el('button', BTN, 'Dots');
   const tabBreath = el('button', BTN, 'Breathe');
+  const tabCross = el('button', BTN, 'Crossword');
   const closeBtn = el('button', BTN + 'margin-left:auto;', 'Close');
-  top.append(tabDots, tabBreath, closeBtn);
+  top.append(tabDots, tabBreath, tabCross, closeBtn);
 
   const stage = el('div', 'position:relative; flex:1 1 0; min-height:0;');
   const canvas = el('canvas', 'position:absolute; inset:0; width:100%; height:100%; display:block;');
   stage.appendChild(canvas);
+
+  // crossword: the extension's own page in an iframe, created on first visit. It runs on the
+  // extension origin, so its saved puzzles and themes are shared across every site.
+  let cross = null;
+  function ensureCross() {
+    if (cross) return;
+    cross = el('iframe', 'position:absolute; inset:0; width:100%; height:100%; border:0; display:none; background:#11181f;');
+    cross.src = chrome.runtime.getURL('crossword/index.html');
+    cross.title = 'Pocket Crossword';
+    stage.appendChild(cross);
+  }
 
   // bottom bar, dots mode: your estimate -> Check -> true count
   const bar = el('div', 'flex:none; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 14px;');
@@ -153,25 +165,29 @@
   let mode = 'dots';
   function setMode(m) {
     mode = m;
+    const light = m === 'breath';
     bar.style.display = m === 'dots' ? 'flex' : 'none';
     breathInfo.style.display = m === 'breath' ? 'block' : 'none';
-    panel.style.background = m === 'dots' ? '#0b2a36' : '#e9e6fb';
-    notes.style.background = m === 'dots' ? 'rgba(0,0,0,.35)' : 'rgba(255,255,255,.7)';
-    notes.style.color = m === 'dots' ? '#fff' : '#3b3a5c';
-    notes.style.borderColor = m === 'dots' ? 'rgba(255,255,255,.35)' : 'rgba(59,58,92,.35)';
+    notesWrap.style.display = m === 'cross' ? 'none' : '';
+    canvas.style.display = m === 'cross' ? 'none' : 'block';
+    if (m !== 'cross') resize(); // the canvas measures 0 while hidden, so re-fit it when it comes back
+    if (m === 'cross') ensureCross();
+    if (cross) cross.style.display = m === 'cross' ? 'block' : 'none';
+    panel.style.background = light ? '#e9e6fb' : '#0b2a36';
+    notes.style.background = light ? 'rgba(255,255,255,.7)' : 'rgba(0,0,0,.35)';
+    notes.style.color = light ? '#3b3a5c' : '#fff';
+    notes.style.borderColor = light ? 'rgba(59,58,92,.35)' : 'rgba(255,255,255,.35)';
     const act = 'background:rgba(255,255,255,.3);';
-    tabDots.style.cssText = BTN + (m === 'dots' ? act : '');
-    tabBreath.style.cssText = BTN + (m === 'breath' ? act : '');
-    if (m === 'breath') breathStart = performance.now();
-    else { dotsStart = performance.now(); dotsClock.textContent = '0:00'; }
     // the breath screen is light, so the top buttons need dark text there
-    const fg = m === 'dots' ? '#fff' : '#3b3a5c';
-    [tabDots, tabBreath, closeBtn].forEach((b) => {
-      b.style.color = fg;
-      b.style.borderColor = m === 'dots' ? 'rgba(255,255,255,.35)' : 'rgba(59,58,92,.35)';
-    });
-    if (m === 'breath') closeBtn.style.cssText = BTN + 'margin-left:auto;color:' + fg + ';border-color:rgba(59,58,92,.35);';
-    else closeBtn.style.cssText = BTN + 'margin-left:auto;';
+    const fg = light ? '#3b3a5c' : '#fff';
+    const bd = light ? 'rgba(59,58,92,.35)' : 'rgba(255,255,255,.35)';
+    const tone = 'color:' + fg + ';border-color:' + bd + ';';
+    tabDots.style.cssText = BTN + tone + (m === 'dots' ? act : '');
+    tabBreath.style.cssText = BTN + tone + (m === 'breath' ? act : '');
+    tabCross.style.cssText = BTN + tone + (m === 'cross' ? act : '');
+    closeBtn.style.cssText = BTN + 'margin-left:auto;' + tone;
+    if (m === 'breath') breathStart = performance.now();
+    else if (m === 'dots') { dotsStart = performance.now(); dotsClock.textContent = '0:00'; }
   }
 
   // ---- canvas ------------------------------------------------------------
@@ -311,12 +327,13 @@
     raf = requestAnimationFrame(frame);
     g.setTransform(DPR, 0, 0, DPR, 0, 0);
     if (mode === 'dots') { drawDots(now / 1000); dotsClock.textContent = fmtClock((now - dotsStart) / 1000); }
-    else drawBreath(now);
+    else if (mode === 'breath') drawBreath(now);
   }
 
   // ---- wiring -----------------------------------------------------------
   tabDots.addEventListener('click', () => setMode('dots'));
   tabBreath.addEventListener('click', () => setMode('breath'));
+  tabCross.addEventListener('click', () => setMode('cross'));
   newBtn.addEventListener('click', makeNetwork);
 
   function check() {
@@ -336,6 +353,9 @@
   backdrop.addEventListener('click', close);
   function onEsc(e) { if (e.key === 'Escape') close(); }
   window.addEventListener('keydown', onEsc, true);
+  // Esc pressed while the crossword iframe has focus is relayed here
+  function onMsg(e) { if (cross && e.source === cross.contentWindow && e.data && e.data.nbr === 'close') close(); }
+  window.addEventListener('message', onMsg);
 
   makeNetwork();
   setMode('breath');
@@ -349,6 +369,7 @@
       if (noteTimer) saveNotes();
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onEsc, true);
+      window.removeEventListener('message', onMsg);
       host.remove();
     },
   };

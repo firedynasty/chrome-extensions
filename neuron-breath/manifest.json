@@ -1,9 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Neuron Breath",
-  "version": "1.1",
-  "description": "A glowing network of dots to estimate, plus 4-4-4-4 box breathing. Toggle on/off via the toolbar icon.",
+  "version": "1.2",
+  "description": "A glowing network of dots to estimate, 4-4-4-4 box breathing, and a pocket crossword. Toggle on/off via the toolbar icon.",
   "permissions": ["activeTab", "scripting", "storage"],
+  "web_accessible_resources": [
+    { "resources": ["crossword/index.html", "crossword/crossword.js"], "matches": ["<all_urls>"] }
+  ],
   "background": {
     "service_worker": "background.js"
   },

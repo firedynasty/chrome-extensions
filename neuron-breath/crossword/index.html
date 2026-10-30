@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pocket Crossword</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400..600&display=swap">
+<style>
+/* Layout: one calm column on phones. Board on the left, clue lists beside it on wide screens. */
+:root {
+  --bg: #edf0f2;
+  --surface: #ffffff;
+  --ink: #16202a;
+  --muted: #5e6b78;
+  --line: #c9d1d8;
+  --accent: #0b7a62;
+  --accent-ink: #ffffff;
+  --word: #d3eae2;
+  --sel: #f6d860;
+  --sel-ink: #16202a;
+  --wrong: #c23b2e;
+  --solved: #bfe3d6;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11181f;
+    --surface: #1b252e;
+    --ink: #e7edf2;
+    --muted: #98a5b1;
+    --line: #33424f;
+    --accent: #4cc9a6;
+    --accent-ink: #0b1a15;
+    --word: #1f3d37;
+    --sel: #e3c050;
+    --sel-ink: #1a1405;
+    --wrong: #ff8a7a;
+    --solved: #1f4a3f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11181f;
+  --surface: #1b252e;
+  --ink: #e7edf2;
+  --muted: #98a5b1;
+  --line: #33424f;
+  --accent: #4cc9a6;
+  --accent-ink: #0b1a15;
+  --word: #1f3d37;
+  --sel: #e3c050;
+  --sel-ink: #1a1405;
+  --wrong: #ff8a7a;
+  --solved: #1f4a3f;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  padding-block: 28px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.7rem, 6vw, 2.3rem);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+  text-wrap: balance;
+}
+.sub { margin: 6px 0 0; color: var(--muted); max-width: 46ch; }
+
+.maker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.maker select, .themes input, .themes textarea {
+  font: 400 0.95rem var(--font-body);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.maker select { min-width: 0; max-width: 100%; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tab {
+  font: 500 0.95rem var(--font-body);
+  color: var(--ink);
+  background: transparent;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tab[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.tab .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: none; }
+.tab.solved .dot { display: inline-block; }
+.tab[aria-pressed="true"] .dot { background: var(--bg); }
+
+.play { display: flex; flex-wrap: wrap; gap: 30px; align-items: flex-start; }
+.board { flex: 1 1 340px; min-width: 0; max-width: 520px; display: flex; flex-direction: column; gap: 14px; }
+.clues { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+
+.now {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 2.9em;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.now .tag {
+  font: 600 0.78rem var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.now .txt { min-width: 0; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  gap: 5px;
+  width: min(100%, calc(var(--cols) * 74px));
+}
+.gap { aspect-ratio: 1; }
+.cell {
+  aspect-ratio: 1;
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 7px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.cell.inword { background: var(--word); border-color: var(--accent); }
+.cell.sel { background: var(--sel); border-color: var(--sel-ink); }
+.cell .n {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font: 600 0.62rem var(--font-body);
+  color: var(--muted);
+}
+.cell.sel .n { color: var(--sel-ink); opacity: 0.7; }
+.cell .l {
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: clamp(1.15rem, 5.6vw, 1.9rem);
+  color: var(--ink);
+  text-transform: uppercase;
+  line-height: 1;
+}
+.cell.sel .l { color: var(--sel-ink); }
+.cell.wrong { border-color: var(--wrong); }
+.cell.wrong .l { color: var(--wrong); }
+.grid.solved .cell { background: var(--solved); border-color: var(--accent); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  font: 500 0.92rem var(--font-body);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.tab:focus-visible, .btn:focus-visible, .clue:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.msg { min-height: 1.5em; margin: 0; color: var(--muted); }
+.msg strong { color: var(--ink); }
+
+.clues h2 {
+  font: 600 0.78rem var(--font-body);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+.clues ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.clue {
+  width: 100%;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  text-align: left;
+  font: 400 1rem var(--font-body);
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.clue b { font-family: var(--font-display); font-weight: 700; min-width: 1.4em; color: var(--muted); }
+.clue .len { color: var(--muted); white-space: nowrap; }
+.clue.on { background: var(--word); }
+.clue.done span:not(.len) { text-decoration: line-through; text-decoration-color: var(--muted); color: var(--muted); }
+
+.themes { background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.themes summary { cursor: pointer; font-weight: 600; }
+.themes .inner { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.themes h3 { font: 600 0.78rem var(--font-body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.themes input, .themes textarea { width: 100%; }
+.themes textarea { min-height: 7em; font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem; }
+.themes .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.themes .row input { flex: 1 1 200px; width: auto; }
+.themes ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.themes li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.themes li .meta { color: var(--muted); font-size: 0.85rem; }
+.themes .note { margin: 0; color: var(--muted); font-size: 0.88rem; }
+
+#kb { position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; pointer-events: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .cell, .tab, .btn, .clue { transition: background-color 0.12s ease, border-color 0.12s ease; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Pocket Crossword</h1>
+    <p class="sub">A few words, about two minutes. Pick a theme, get a fresh grid. No feed, no notifications.</p>
+  </header>
+
+  <div class="maker">
+    <select id="themeSel" aria-label="Theme"></select>
+    <button class="btn primary" id="gen" type="button">New puzzle</button>
+  </div>
+
+  <nav class="tabs" id="tabs" aria-label="Puzzles"></nav>
+
+  <main class="play">
+    <section class="board">
+      <div class="now" id="now" aria-live="polite"></div>
+      <div id="grid" role="grid" aria-label="Crossword grid"></div>
+      <div class="actions">
+        <button class="btn" id="check" type="button">Check</button>
+        <button class="btn" id="hint" type="button">Hint</button>
+        <button class="btn" id="reset" type="button">Start over</button>
+        <button class="btn" id="drop" type="button">Delete puzzle</button>
+      </div>
+      <p class="msg" id="msg" aria-live="polite"></p>
+    </section>
+    <section class="clues" id="clues" aria-label="Clues"></section>
+  </main>
+
+  <details class="themes" id="themesBox">
+    <summary>Themes &amp; word lists</summary>
+    <div class="inner">
+      <div>
+        <h3>Your themes (saved in this browser)</h3>
+        <ul id="customList"></ul>
+        <p class="note" id="customEmpty">None yet. Add one below or import a list.</p>
+      </div>
+      <div>
+        <h3>Add a theme</h3>
+        <div class="row" style="margin-bottom:8px"><input id="tName" placeholder="Theme name, e.g. Pasta" aria-label="Theme name"></div>
+        <textarea id="tWords" placeholder="One per line:&#10;PENNE, Tube-shaped pasta&#10;BASIL, Green herb on a margherita" aria-label="Words and clues"></textarea>
+        <div class="actions" style="margin-top:8px"><button class="btn primary" id="tAdd" type="button">Save theme</button></div>
+        <p class="note">Words are 3&ndash;8 letters, A&ndash;Z only. A theme needs at least 6 words so puzzles stay different.</p>
+      </div>
+      <div>
+        <h3>Get more themes from a repo</h3>
+        <div class="row">
+          <input id="tUrl" type="url" placeholder="https://raw.githubusercontent.com/you/repo/main/themes.json" aria-label="Themes JSON URL">
+          <button class="btn" id="tFetch" type="button">Import</button>
+        </div>
+        <p class="note">JSON shaped like <code>{"Pasta": [["PENNE", "Tube-shaped pasta"], ["BASIL", "Green herb"]]}</code>. A raw GitHub file works.</p>
+        <div class="actions" style="margin-top:8px"><button class="btn" id="tExport" type="button">Export my themes</button></div>
+        <textarea id="tJson" placeholder="Exported or pasted JSON appears here" aria-label="Themes JSON" style="margin-top:8px"></textarea>
+        <div class="actions" style="margin-top:8px"><button class="btn" id="tPaste" type="button">Import pasted JSON</button></div>
+      </div>
+      <p class="note" id="tMsg" aria-live="polite"></p>
+    </div>
+  </details>
+</div>
+<input id="kb" aria-label="Type your answer" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false">
+
+<script src="crossword.js"></script>
+</body>
+</html>

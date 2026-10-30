@@ -1,6 +1,6 @@
 # Neuron Breath
 
-A short break from thinking on the computer. Click the toolbar icon and an overlay opens on the current page with two tabs, starting on Breathe.
+A short break from thinking on the computer. Click the toolbar icon and an overlay opens on the current page with three tabs (Dots, Breathe, Crossword), starting on Breathe.
 
 ## Dots
 
@@ -9,6 +9,12 @@ A glowing network of dots joined by thin lines (a nod to the brain-neurons pictu
 ## Breathe
 
 Box breathing, 4 seconds each: breathe in, hold, breathe out, hold. A white circle grows and shrinks with the breath, a ring fills around it over the 16-second cycle, and the current phase and seconds left are shown inside. A stopwatch above the ring counts the time of this session; it starts at 0:00 when you open Breathe and resets when you switch back to Dots or close the overlay.
+
+## Crossword
+
+A two-minute themed crossword with a fresh grid each time (the same page as Pocket Crossword in the games site, copied into `crossword/`). Pick a theme and press **New puzzle**; your last 10 puzzles, progress, and any custom themes you add are saved in the extension's own `localStorage`, so they follow you across sites. The "Themes & word lists" panel can import more themes from a JSON file (for example a raw GitHub URL). The notes box is hidden on this tab to give the grid room. Esc closes the overlay.
+
+When updating the puzzle, edit `games/crossword/` in the games repo and copy `index.html` and `crossword.js` over to `crossword/`.
 
 ## Notes
 
